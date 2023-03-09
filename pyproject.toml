@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "pydantic-sql-bridge"
+version = "0.0.1"
+description = "A simple bridge between SQL databases and Pydantic"
+authors = ["Rik <rik.de.kort@hey.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "pydantic_sql_bridge"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pydantic = "^1.10.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
