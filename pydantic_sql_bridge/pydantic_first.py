@@ -2,6 +2,7 @@ from textwrap import indent
 from typing import Type
 
 from pydantic import BaseModel
+from sqlglot import transpile, Dialects
 
 from pydantic_sql_bridge.utils import DatabaseType, get_database_type, Cursor
 
@@ -30,7 +31,7 @@ def get_foreign_key(typ: type) -> (str, type):
 
 
 def generate_sql(models: list[Type[BaseModel]], database_type: DatabaseType) -> str:
-    result = []
+    create_stmts = []
     for model in models:
         table_name = get_table_name(model)
         columns = []
@@ -46,8 +47,8 @@ def generate_sql(models: list[Type[BaseModel]], database_type: DatabaseType) -> 
         if foreign_keys:
             columns.extend(foreign_keys)
         columns = ',\n'.join(columns)
-        result.append(f'CREATE TABLE {table_name} (\n{indent(columns, "  ")}\n)')
-    return '\n\n'.join(result)
+        create_stmts.append(f'CREATE TABLE {table_name} (\n{indent(columns, "  ")}\n)')
+    return ';\n\n'.join(transpile(';\n\n'.join(create_stmts), Dialects.SQLITE, database_type.value))
 
 
 def setup_database(c: Cursor, models: list[Type[BaseModel]]):

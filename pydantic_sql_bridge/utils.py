@@ -4,11 +4,14 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Optional
 
+from sqlglot import Dialects
+
 Cursor = sqlite3.Cursor
 
 
 class DatabaseType(Enum):
-    SQLITE = 'SQLITE'
+    SQLITE = Dialects.SQLITE
+    MSSQL = Dialects.TSQL
 
 
 @contextmanager
