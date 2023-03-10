@@ -1,15 +1,13 @@
-from enum import Enum
 from textwrap import indent
+from typing import Type
 
 from pydantic import BaseModel
 
-
-class DatabaseType(Enum):
-    SQLITE = 'SQLITE'
+from pydantic_sql_bridge.utils import DatabaseType, get_database_type, Cursor
 
 
 def get_table_name(typ: type) -> str:
-    return model.__name__[-3] if model.__name__.endswith('Row') else model.__name__
+    return typ.__name__[-3] if typ.__name__.endswith('Row') else typ.__name__
 
 
 def translate_type(typ: type) -> str:
@@ -31,7 +29,7 @@ def get_foreign_key(typ: type) -> (str, type):
     return fk_table, f'{fk_table}_id', fk_type
 
 
-def generate_sql(models: list[BaseModel], database_type: DatabaseType) -> str:
+def generate_sql(models: list[Type[BaseModel]], database_type: DatabaseType) -> str:
     result = []
     for model in models:
         table_name = get_table_name(model)
@@ -50,3 +48,10 @@ def generate_sql(models: list[BaseModel], database_type: DatabaseType) -> str:
         columns = ',\n'.join(columns)
         result.append(f'CREATE TABLE {table_name} (\n{indent(columns, "  ")}\n)')
     return '\n\n'.join(result)
+
+
+def setup_database(c: Cursor, models: list[Type[BaseModel]]):
+    db_type = get_database_type(c)
+    sql = generate_sql(models, database_type=db_type)
+    for create_table in sql.split('\n\n'):
+        c.execute(create_table)
