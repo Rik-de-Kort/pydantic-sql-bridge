@@ -16,14 +16,35 @@ class CheckingAccount(BaseModel):
 
 
 def test_generate_sql_sqlite():
-    expected = 'CREATE TABLE User (id INTEGER NOT NULL, name TEXT NOT NULL);\n\nCREATE TABLE CheckingAccount (CheckingAccount_id INTEGER NOT NULL, balance REAL NOT NULL, FOREIGN KEY (CheckingAccount_id) REFERENCES CheckingAccount(id))'
+    # Note: spaces after commas here are very important
+    expected = textwrap.dedent('''
+    CREATE TABLE User (
+        __psb_id__ INTEGER NOT NULL, 
+        id INTEGER NOT NULL, 
+        name TEXT NOT NULL, 
+        PRIMARY KEY (__psb_id__)
+    );
+    
+    CREATE TABLE CheckingAccount (
+        __psb_id__ INTEGER NOT NULL, 
+        CheckingAccount_id INTEGER NOT NULL, 
+        balance REAL NOT NULL, 
+        PRIMARY KEY (__psb_id__), 
+        FOREIGN KEY (CheckingAccount_id) REFERENCES CheckingAccount(__psb_id__)
+    )
+    ''').replace('    ', '')
     actual = generate_sql([User, CheckingAccount], database_type=DatabaseType.SQLITE)
-    assert expected.lower().strip() == actual.lower().strip()
+    assert expected.lower().replace('\n', '').strip() == actual.lower().replace('\n', '').strip()
+
+
+def test_generate_sql_mssql():
+    actual = generate_sql([User, CheckingAccount], database_type=DatabaseType.MSSQL)
+    print(actual)
 
 
 def test_setup_database_sqlite():
     with cursor(':memory:') as c:
         setup_database(c, [User, CheckingAccount])
         db_schema = {r['name']: r for r in query(c, 'PRAGMA table_list')}
-        assert {'name': 'User', 'ncol': 2, 'type': 'table'}.items() <= db_schema['User'].items()
-        assert {'name': 'CheckingAccount', 'ncol': 2, 'type': 'table'}.items() <= db_schema['CheckingAccount'].items()
+        assert {'name': 'User', 'ncol': 3, 'type': 'table'}.items() <= db_schema['User'].items()
+        assert {'name': 'CheckingAccount', 'ncol': 3, 'type': 'table'}.items() <= db_schema['CheckingAccount'].items()

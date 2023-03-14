@@ -23,29 +23,25 @@ def translate_type(typ: type) -> str:
 
 def get_foreign_key(typ: type) -> (str, type):
     fk_table = get_table_name(typ)
-    if 'id' in typ.__fields__:
-        fk_type = translate_type(typ.__fields__['id'].type_)
-    else:
-        fk_type = translate_type(int)
-    return fk_table, f'{fk_table}_id', fk_type
+    return fk_table, f'{fk_table}_id', translate_type(int)
 
 
 def generate_sql(models: list[Type[BaseModel]], database_type: DatabaseType) -> str:
     create_stmts = []
     for model in models:
         table_name = get_table_name(model)
-        columns = []
-        foreign_keys = []
+        columns = ['__psb_id__ INTEGER NOT NULL']
+        constraints = ['PRIMARY KEY (__psb_id__)']
         for field in model.__fields__.values():
             if issubclass(field.type_, BaseModel):
                 fk_table, fk_name, fk_type = get_foreign_key(model)
                 columns.append(f'{fk_name} {fk_type}')
-                foreign_keys.append(f'FOREIGN KEY ({fk_name}) REFERENCES {fk_table}(id)')
+                constraints.append(f'FOREIGN KEY ({fk_name}) REFERENCES {fk_table}(__psb_id__)')
             else:
                 columns.append(f'{field.name} {translate_type(field.type_)}')
 
-        if foreign_keys:
-            columns.extend(foreign_keys)
+        # Note: constraints always has at least one entry
+        columns.extend(constraints)
         columns = ',\n'.join(columns)
         create_stmts.append(f'CREATE TABLE {table_name} (\n{indent(columns, "  ")}\n)')
     return ';\n\n'.join(transpile(';\n\n'.join(create_stmts), Dialects.SQLITE, database_type.value))
