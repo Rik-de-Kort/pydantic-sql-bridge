@@ -1,16 +1,20 @@
 import textwrap
 
+import pytest
 from pydantic import BaseModel
-from pydantic_sql_bridge.pydantic_first import generate_sql, setup_database
+from pydantic_sql_bridge.pydantic_first import generate_sql, setup_database, get_fk_types
 from pydantic_sql_bridge.utils import DatabaseType, cursor, query
 
 
 class User(BaseModel):
+    __id__ = ('id',)
     id: int
     name = 'Jane Doe'
 
 
 class CheckingAccount(BaseModel):
+    __id__ = ('account_name',)
+    account_name: str
     user: User
     balance: float
 
@@ -19,22 +23,21 @@ def test_generate_sql_sqlite():
     # Note: spaces after commas here are very important
     expected = textwrap.dedent('''
     CREATE TABLE User (
-        __psb_id__ INTEGER NOT NULL, 
         id INTEGER NOT NULL, 
         name TEXT NOT NULL, 
-        PRIMARY KEY (__psb_id__)
+        PRIMARY KEY (id)
     );
     
     CREATE TABLE CheckingAccount (
-        __psb_id__ INTEGER NOT NULL, 
-        CheckingAccount_id INTEGER NOT NULL, 
+        account_name TEXT NOT NULL, 
+        User_id INTEGER NOT NULL, 
         balance REAL NOT NULL, 
-        PRIMARY KEY (__psb_id__), 
-        FOREIGN KEY (CheckingAccount_id) REFERENCES CheckingAccount(__psb_id__)
+        PRIMARY KEY (account_name), 
+        FOREIGN KEY (User_id) REFERENCES User(id)
     )
     ''').replace('    ', '')
     actual = generate_sql([User, CheckingAccount], database_type=DatabaseType.SQLITE)
-    assert expected.lower().replace('\n', '').strip() == actual.lower().replace('\n', '').strip()
+    assert actual.lower().replace('\n', '').strip() == expected.lower().replace('\n', '').strip()
 
 
 def test_generate_sql_mssql():
@@ -46,5 +49,36 @@ def test_setup_database_sqlite():
     with cursor(':memory:') as c:
         setup_database(c, [User, CheckingAccount])
         db_schema = {r['name']: r for r in query(c, 'PRAGMA table_list')}
-        assert {'name': 'User', 'ncol': 3, 'type': 'table'}.items() <= db_schema['User'].items()
+        assert {'name': 'User', 'ncol': 2, 'type': 'table'}.items() <= db_schema['User'].items()
         assert {'name': 'CheckingAccount', 'ncol': 3, 'type': 'table'}.items() <= db_schema['CheckingAccount'].items()
+
+
+class CheckingAccountNoId(BaseModel):
+    account_name: str
+    user: User
+    balance: float
+
+
+class CheckingAccountTypoId(BaseModel):
+    __id__ = ('acount_name',)
+    account_name: str
+    user: User
+    balance: float
+
+
+class CheckingAccountModelId(BaseModel):
+    __id__ = ('user',)
+    account_name: str
+    user: User
+    balance: float
+
+
+def test_get_fk_types():
+    assert get_fk_types(User) == ('integer not null',)
+    assert get_fk_types(CheckingAccount) == ('text not null',)
+    with pytest.raises(TypeError):
+        get_fk_types(CheckingAccountNoId)
+    with pytest.raises(TypeError):
+        get_fk_types(CheckingAccountTypoId)
+    with pytest.raises(TypeError):
+        get_fk_types(CheckingAccountModelId)

@@ -21,22 +21,39 @@ def translate_type(typ: type) -> str:
     raise TypeError(f'Unknown type {typ}')
 
 
-def get_foreign_key(typ: type) -> (str, type):
-    fk_table = get_table_name(typ)
-    return fk_table, f'{fk_table}_id', translate_type(int)
+def get_fk_types(typ: Type[BaseModel]) -> tuple:
+    if not hasattr(typ, '__id__'):
+        raise TypeError(f'Model {typ} needs an __id__ attribute in order to be used as a foreign key.')
+    if any(not_present := [name for name in typ.__id__ if name not in typ.__fields__]):
+        raise TypeError(f'Key names {not_present} specified in __id__ are not present on {typ}.')
+    if any(references := [name for name in typ.__id__ if issubclass(typ.__fields__[name].type_, BaseModel)]):
+        raise TypeError(f'Cannot specify {references} in __id__ because they are Pydantic models.')
+    key_types = tuple(translate_type(typ.__fields__[name].type_) for name in typ.__id__)
+    return key_types
 
 
 def generate_sql(models: list[Type[BaseModel]], database_type: DatabaseType) -> str:
     create_stmts = []
     for model in models:
         table_name = get_table_name(model)
-        columns = ['__psb_id__ INTEGER NOT NULL']
-        constraints = ['PRIMARY KEY (__psb_id__)']
+        columns = []
+        constraints = []
+        if hasattr(model, '__id__'):
+            if any(not_found := [name for name in model.__id__ if name not in model.__fields__]):
+                raise TypeError(f'Fields {not_found} from __id__ not found on model {model}')
+            constraints.append(f'PRIMARY KEY ({", ".join(model.__id__)})')
+
         for field in model.__fields__.values():
             if issubclass(field.type_, BaseModel):
-                fk_table, fk_name, fk_type = get_foreign_key(model)
-                columns.append(f'{fk_name} {fk_type}')
-                constraints.append(f'FOREIGN KEY ({fk_name}) REFERENCES {fk_table}(__psb_id__)')
+                fk_table = get_table_name(field.type_)
+                fk_types = get_fk_types(field.type_)
+                fk_names = [f'{fk_table}_{name}' for name in field.type_.__id__]
+                for name, typ in zip(fk_names, fk_types):
+                    columns.append(f'{name} {typ}')
+
+                fk_names = ', '.join(fk_names)
+                referred_names = ', '.join(field.type_.__id__)
+                constraints.append(f'FOREIGN KEY ({fk_names}) REFERENCES {fk_table}({referred_names})')
             else:
                 columns.append(f'{field.name} {translate_type(field.type_)}')
 
