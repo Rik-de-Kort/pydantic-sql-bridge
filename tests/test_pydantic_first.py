@@ -3,7 +3,8 @@ import textwrap
 import pytest
 from pydantic import BaseModel
 from pydantic_sql_bridge.pydantic_first import generate_sql, setup_database, get_fk_types
-from pydantic_sql_bridge.utils import DatabaseType, cursor, query
+from pydantic_sql_bridge.utils import DatabaseType
+from pydantic_sql_bridge.read_write import cursor, raw_query
 
 
 class User(BaseModel):
@@ -48,7 +49,7 @@ def test_generate_sql_mssql():
 def test_setup_database_sqlite():
     with cursor(':memory:') as c:
         setup_database(c, [User, CheckingAccount])
-        db_schema = {r['name']: r for r in query(c, 'PRAGMA table_list')}
+        db_schema = {r['name']: r for r in raw_query(c, 'PRAGMA table_list')}
         assert {'name': 'User', 'ncol': 2, 'type': 'table'}.items() <= db_schema['User'].items()
         assert {'name': 'CheckingAccount', 'ncol': 3, 'type': 'table'}.items() <= db_schema['CheckingAccount'].items()
 
