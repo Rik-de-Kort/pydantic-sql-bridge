@@ -4,11 +4,7 @@ from typing import Type
 from pydantic import BaseModel
 from sqlglot import transpile, Dialects
 
-from pydantic_sql_bridge.utils import DatabaseType, get_database_type, Cursor
-
-
-def get_table_name(typ: type) -> str:
-    return typ.__name__[-3] if typ.__name__.endswith('Row') else typ.__name__
+from pydantic_sql_bridge.utils import DatabaseType, get_database_type, Cursor, get_table_name, is_model
 
 
 def translate_type(typ: type) -> str:
@@ -18,7 +14,7 @@ def translate_type(typ: type) -> str:
         return 'text not null'
     elif typ == float:
         return 'real not null'
-    raise TypeError(f'Unknown type {typ}')
+    raise TypeError(f'{typ} not supported yet, use int, str, float, or another pydantic model')
 
 
 def get_fk_types(typ: Type[BaseModel]) -> tuple:
@@ -44,7 +40,7 @@ def generate_sql(models: list[Type[BaseModel]], database_type: DatabaseType) -> 
             constraints.append(f'PRIMARY KEY ({", ".join(model.__id__)})')
 
         for field in model.__fields__.values():
-            if issubclass(field.type_, BaseModel):
+            if is_model(field):
                 fk_table = get_table_name(field.type_)
                 fk_types = get_fk_types(field.type_)
                 fk_names = [f'{fk_table}_{name}' for name in field.type_.__id__]

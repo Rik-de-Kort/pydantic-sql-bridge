@@ -1,6 +1,6 @@
 import sqlite3
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any
 
 from sqlglot import Dialects
@@ -36,3 +36,16 @@ def content_hash(thing: Any) -> int:
 
 def model_hash(model: BaseModel) -> int:
     return content_hash(tuple((field, getattr(model, field)) for field in model.__fields__.keys()))
+
+
+def get_table_name(typ: type) -> str:
+    return typ.__name__[-3] if typ.__name__.endswith('Row') else typ.__name__
+
+
+def is_model(field: Field) -> bool:
+    # field.type_ may be something like tuple[str, str] on which issubclass raises a type error
+    # typing.isclass returns True for this kind of thing though, so try-except it is
+    try:
+        return issubclass(field.type_, BaseModel)
+    except TypeError:
+        return False
