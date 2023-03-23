@@ -1,4 +1,5 @@
 import sqlite3
+from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Type, Optional, Any
@@ -32,28 +33,6 @@ def raw_query(c: Cursor, sql: str, data: Optional[tuple] = None) -> list[dict[st
     return [dict(zip(columns, row)) for row in result]
 
 
-class InnerJoin(BaseModel):
-    right: str
-    left: str
-    on: list[tuple[str, str]]
-
-
-class SelectQuery(BaseModel):
-    columns: set[tuple[str, str]]  # Table name, column name
-    from_table: str
-    inner_joins: list[InnerJoin]
-    where: list[tuple[str, str, Any]] = []  # Table, column, value
-
-    def __str__(self):
-        result = parse_one('select ' + ' ,'.join(f'{tbl}.{col}' for tbl, col in self.columns)).from_(self.from_table)
-        for ij in self.inner_joins:
-            join_clause = parse_one(' and '.join(f'{ij.left}.{lcol}={ij.right}.{rcol}' for lcol, rcol in ij.on))
-            result = result.join(exp.Join(this=ij.right, kind='inner', on=join_clause))
-        for table, column, value in self.where:
-            result = result.where(f'{table}.{column}=?', append=True)
-        return result.sql()
-
-
 def build_query(model_type: Type[BaseModel]) -> exp.Select:
     table_name = get_table_name(model_type)
     result = exp.select().from_(table_name)
@@ -72,6 +51,17 @@ def build_query(model_type: Type[BaseModel]) -> exp.Select:
     return result
 
 
+def build_model(grouped_selects: dict[str, dict[str, Any]], model_type: Type[BaseModel]) -> BaseModel:
+    model_name = get_table_name(model_type)
+    as_dict = {}
+    for name, field in model_type.__fields__.items():
+        if not is_model(field):
+            as_dict[name] = grouped_selects[model_name][name]
+        else:
+            as_dict[name] = build_model(grouped_selects, field.type_)
+    return model_type(**as_dict)
+
+
 def get_where(c: Cursor, model_type: Type[BaseModel], **constraints) -> list[BaseModel]:
     """
     Retrieve Pydantic models from a database using cursor c, potentially matching constraints.
@@ -82,15 +72,28 @@ def get_where(c: Cursor, model_type: Type[BaseModel], **constraints) -> list[Bas
     if any(not_found := [col for col in constraints.keys() if col not in model_type.__fields__]):
         raise TypeError(f'columns {not_found} not found in model {model_type}')
 
-    table_name = get_table_name(model_type)
+    db_type = get_database_type(c)
 
-    if constraints:
-        constraint_col_names, constraint_col_values = zip(*constraints.items())
-        constraints_sql = ' AND '.join(f'{col}=?' for col in constraint_col_names)
-        query_result = raw_query(c, f'SELECT * FROM {table_name} WHERE {constraints_sql}', tuple(constraint_col_values))
+    if not constraints:
+        query = build_query(model_type)
+        query_result = c.execute(query.sql(dialect=db_type.value)).fetchall()
     else:
-        query_result = raw_query(c, f'SELECT * FROM {table_name}')
-    return [model_type(**row) for row in query_result]
+        query = build_query(model_type)
+        constraint_col_names, constraint_col_values = zip(*constraints.items())
+        for name in constraint_col_names:
+            query = query.where(f'{name} = ?', append=True)
+        query_result = c.execute(query.sql(dialect=db_type.value), tuple(constraint_col_values)).fetchall()
+
+    result = []
+    for row in query_result:
+        # We don't push this selection grouping into build_model because it complicates the contract that the function
+        # assumes: in that case, all the fields would have to be aligned in terms of position, and we'd have to pass in
+        # the query. This is a bit cleaner.
+        grouped_selects = defaultdict(lambda: {})
+        for col, value in zip(query.selects, row):
+            grouped_selects[col.table][col.name] = value
+        result.append(build_model(grouped_selects, model_type))
+    return result
 
 
 def flatten_model(model: BaseModel) -> dict:

@@ -2,7 +2,7 @@ from pydantic import BaseModel
 import pytest
 from sqlglot import expressions as exp
 
-from pydantic_sql_bridge.read_write import cursor, get_where, write, build_query, SelectQuery, InnerJoin
+from pydantic_sql_bridge.read_write import cursor, get_where, write, build_query
 from pydantic_sql_bridge.pydantic_first import setup_database
 
 
@@ -38,7 +38,6 @@ def test_roundtrip_simple():
     assert len(result) == 2 and transactions[0] in result and transactions[1] in result
 
 
-@pytest.mark.xfail
 def test_roundtrip_fk():
     transactions = [
         Trade(id=0, counterparty=1, amount=1.0),
