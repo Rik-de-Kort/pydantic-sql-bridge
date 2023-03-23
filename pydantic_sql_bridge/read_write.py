@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Type, Optional, Any
 
 from pydantic import BaseModel
-from sqlglot import transpile, Dialects
+from sqlglot import transpile, Dialects, parse_one
+import sqlglot.expressions as exp
 
 from pydantic_sql_bridge.utils import Cursor, get_database_type, get_table_name, is_model
 
@@ -37,10 +38,6 @@ class InnerJoin(BaseModel):
     on: list[tuple[str, str]]
 
 
-import sqlglot.expressions as exp
-from sqlglot import parse_one
-
-
 class SelectQuery(BaseModel):
     columns: set[tuple[str, str]]  # Table name, column name
     from_table: str
@@ -57,27 +54,21 @@ class SelectQuery(BaseModel):
         return result.sql()
 
 
-def build_select_query(model_type: Type[BaseModel]) -> exp.Select: # SelectQuery:
+def build_query(model_type: Type[BaseModel]) -> exp.Select:
     table_name = get_table_name(model_type)
     result = exp.select().from_(table_name)
     for name, field in model_type.__fields__.items():
         if not is_model(field):
             result = result.select(f'{table_name}.{name}')
-            # result.columns.add((result.from_table, name))
         else:
-            sub_query = build_select_query(field.type_)
-            result = result.select(*sub_query.selects).join(
-                exp.
-            )
-
-
-            # result.columns.update(sub_query.columns)
-            # result.inner_joins.append(InnerJoin(
-            #     left=table_name,
-            #     right=sub_query.from_table,
-            #     on=[(f'{sub_query.from_table}_{name}', name) for name in field.type_.__id__]
-            # ))
-            # result.inner_joins.extend(sub_query.inner_joins)
+            sub_query = build_query(field.type_)
+            sub_table = sub_query.args['from'].expressions[0]
+            join_expr = exp.Join(this=sub_table, kind='inner')
+            for col in field.type_.__id__:
+                join_expr = join_expr.on(f'{table_name}.{sub_table}_{col} = {sub_table}.{col}', append=True)
+            result = result.select(*sub_query.selects).join(join_expr, append=True)
+            for join_expr in sub_query.args.get('joins', []):
+                result = result.join(join_expr, append=True)
     return result
 
 
