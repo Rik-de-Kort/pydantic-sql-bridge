@@ -41,7 +41,7 @@ def build_query(model_type: Type[BaseModel]) -> exp.Select:
             result = result.select(f'{table_name}.{name}')
         else:
             sub_query = build_query(field.annotation)
-            sub_table = sub_query.args['from'].expressions[0]
+            sub_table = sub_query.args['from'].this
             join_expr = exp.Join(this=sub_table, kind='inner')
             for col in field.annotation.__id__:
                 join_expr = join_expr.on(f'{table_name}.{sub_table}_{col} = {sub_table}.{col}', append=True)

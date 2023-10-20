@@ -24,17 +24,15 @@ def test_generate_sql_sqlite():
     # Note: spaces after commas here are very important
     expected = textwrap.dedent('''
     CREATE TABLE User (
-        id INTEGER NOT NULL, 
-        name TEXT NOT NULL, 
-        PRIMARY KEY (id)
+        id INTEGER NOT NULL PRIMARY KEY, 
+        name TEXT NOT NULL
     );
     
     CREATE TABLE CheckingAccount (
-        account_name TEXT NOT NULL, 
+        account_name TEXT NOT NULL PRIMARY KEY, 
         User_id INTEGER NOT NULL, 
         balance REAL NOT NULL, 
-        PRIMARY KEY (account_name), 
-        FOREIGN KEY (User_id) REFERENCES User(id)
+        FOREIGN KEY (User_id) REFERENCES User (id)
     )
     ''').replace('    ', '')
     actual = generate_sql([User, CheckingAccount], database_type=DatabaseType.SQLITE)
