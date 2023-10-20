@@ -1,34 +1,13 @@
-from pathlib import Path
-
-from sqlglot import transpile, Dialects, parse_one, expressions as expr
-
-from pydantic_sql_bridge.read_write import cursor
-
-portfolio_sql = '''CREATE TABLE Portfolio (
-    sedol NCHAR(7) PRIMARY KEY,
-    cluster NVARCHAR(50),
-    n_invested BIGINT
-)'''
-
-benchmark_sql = '''CREATE TABLE Benchmark (
-    sedol NCHAR(7),
-    name NVARCHAR(50),
-    n_available BIGINT,
-    is_reit BIT,
-    CONSTRAINT FK_Sedol FOREIGN KEY (sedol) REFERENCES portfolio(sedol)
-)'''
-
-portfolio_sqlite = transpile(portfolio_sql, Dialects.TSQL, Dialects.SQLITE)[0]
-benchmark_sqlite = transpile(benchmark_sql, Dialects.TSQL, Dialects.SQLITE)[0]
-
-pf_expr = parse_one(portfolio_sqlite)
-table_name = pf_expr.this.this.this.this
+from sqlglot import parse_one, expressions as expr
 
 SqlglotType = expr.DataType.Type
 SQLGLOT_TYPE_TO_PYDANTIC = {
     SqlglotType.INT: int,
     SqlglotType.TEXT: str,
     SqlglotType.BIT: bool,
+    SqlglotType.NCHAR: str,
+    SqlglotType.NVARCHAR: str,
+    SqlglotType.BIGINT: int,
 }
 
 
@@ -58,10 +37,7 @@ def to_pydantic_model(sql_stmt) -> str:
     return result
 
 
-print(to_pydantic_model(portfolio_sqlite))
-print(to_pydantic_model(benchmark_sqlite))
-
-Path('test.db').unlink(missing_ok=True)
-with cursor('test.db') as c:
-    c.execute(portfolio_sqlite)
-    c.execute(benchmark_sqlite)
+def create_models_from_sql(sql: list[str]) -> str:
+    models = [to_pydantic_model(sql_stmt) for sql_stmt in sql]
+    head = 'from pydantic import BaseModel'
+    return '\n\n'.join([head] + models)

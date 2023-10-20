@@ -92,9 +92,10 @@ models.
 from pydantic_sql_bridge.sql_first import create_models_from_sql
 
 with open('table_definitions.sql', 'r') as handle:
-    sql = handle.read()
+    sql = handle.read().split('\n\n')
 
-create_models_from_sql(sql, filename='models.py')
+with open('models.py') as handle:
+    handle.write(create_models_from_sql(sql))
 ```
 
 ## Notes from the maintainers
