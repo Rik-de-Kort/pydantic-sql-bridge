@@ -46,6 +46,6 @@ def is_model(field: Field) -> bool:
     # field.type_ may be something like tuple[str, str] on which issubclass raises a type error
     # typing.isclass returns True for this kind of thing though, so try-except it is
     try:
-        return issubclass(field.type_, BaseModel)
+        return issubclass(field.annotation, BaseModel)
     except TypeError:
         return False

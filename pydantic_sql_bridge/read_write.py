@@ -36,14 +36,14 @@ def raw_query(c: Cursor, sql: str, data: Optional[tuple] = None) -> list[dict[st
 def build_query(model_type: Type[BaseModel]) -> exp.Select:
     table_name = get_table_name(model_type)
     result = exp.select().from_(table_name)
-    for name, field in model_type.__fields__.items():
+    for name, field in model_type.model_fields.items():
         if not is_model(field):
             result = result.select(f'{table_name}.{name}')
         else:
-            sub_query = build_query(field.type_)
+            sub_query = build_query(field.annotation)
             sub_table = sub_query.args['from'].expressions[0]
             join_expr = exp.Join(this=sub_table, kind='inner')
-            for col in field.type_.__id__:
+            for col in field.annotation.__id__:
                 join_expr = join_expr.on(f'{table_name}.{sub_table}_{col} = {sub_table}.{col}', append=True)
             result = result.select(*sub_query.selects).join(join_expr, append=True)
             for join_expr in sub_query.args.get('joins', []):
@@ -54,11 +54,11 @@ def build_query(model_type: Type[BaseModel]) -> exp.Select:
 def build_model(grouped_selects: dict[str, dict[str, Any]], model_type: Type[BaseModel]) -> BaseModel:
     model_name = get_table_name(model_type)
     as_dict = {}
-    for name, field in model_type.__fields__.items():
+    for name, field in model_type.model_fields.items():
         if not is_model(field):
             as_dict[name] = grouped_selects[model_name][name]
         else:
-            as_dict[name] = build_model(grouped_selects, field.type_)
+            as_dict[name] = build_model(grouped_selects, field.annotation)
     return model_type(**as_dict)
 
 
@@ -69,7 +69,7 @@ def get_where(c: Cursor, model_type: Type[BaseModel], **constraints) -> list[Bas
     >>> get_where(c, User, id=24)
     [User(id=24, name='Jane Doe')]
     """
-    if any(not_found := [col for col in constraints.keys() if col not in model_type.__fields__]):
+    if any(not_found := [col for col in constraints.keys() if col not in model_type.model_fields]):
         raise TypeError(f'columns {not_found} not found in model {model_type}')
 
     db_type = get_database_type(c)
@@ -99,7 +99,7 @@ def get_where(c: Cursor, model_type: Type[BaseModel], **constraints) -> list[Bas
 def flatten_model(model: BaseModel) -> dict:
     """Flatten a model into a dictionary, with the primary keys of all referring models pulled out."""
     result = {}
-    for name, field in model.__fields__.items():
+    for name, field in model.model_fields.items():
         if not is_model(field):
             result[name] = getattr(model, name)
         else:
@@ -132,7 +132,7 @@ def write(
     elif compare_on is None:
         compare_on = model_type.__id__
 
-    if any(not_present := [name for name in compare_on if name not in model_type.__fields__]):
+    if any(not_present := [name for name in compare_on if name not in model_type.model_fields]):
         raise TypeError(f'Fields {not_present} in compare_on are not present in model {model_type}')
 
     write_dict_models(

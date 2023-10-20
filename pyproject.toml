@@ -9,7 +9,7 @@ packages = [{include = "pydantic_sql_bridge"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-pydantic = "^1.10.5"
+pydantic = "2.*"
 sqlglot = "^11.3.6"
 
 

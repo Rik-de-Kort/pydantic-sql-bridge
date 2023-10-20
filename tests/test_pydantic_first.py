@@ -10,7 +10,7 @@ from pydantic_sql_bridge.read_write import cursor, raw_query
 class User(BaseModel):
     __id__ = ('id',)
     id: int
-    name = 'Jane Doe'
+    name: str = 'Jane Doe'
 
 
 class CheckingAccount(BaseModel):
