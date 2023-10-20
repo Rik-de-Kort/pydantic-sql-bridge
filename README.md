@@ -128,6 +128,10 @@ but writing still has to be done per model.
 The `__id__` attribute is also not so nice to use. In the future Pydantic-SQL-bridge will include helpers to make this
 easier.
 
+The feature is a bit ORM-y in the sense that Pydantic-SQL-Bridge stops being a very thin wrapper and the reality of the SQL database. However, if you have a normalized schema, it will be quite common to want to work with data that's returned from a join rather than the individual tables themselves. Or you could just get the data from a view which does the joining, in which case the data is flat, but flat is better than nested anyway.
+
+2023-10-20 status: remove foreign key features
+
 ## Why not an ORM?
 
 "ORM" implies taking on object-oriented programming features like inheritance. This does not match with the database
