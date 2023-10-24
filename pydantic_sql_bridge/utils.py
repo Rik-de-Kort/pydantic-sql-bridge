@@ -39,7 +39,7 @@ def model_hash(model: BaseModel) -> int:
 
 
 def get_table_name(model_type: type) -> str:
-    return model_type.__name__[-3] if model_type.__name__.endswith('Row') else model_type.__name__
+    return model_type.__name__[:-3] if model_type.__name__.endswith('Row') else model_type.__name__
 
 
 def get_model_name(table_name: str) -> str:

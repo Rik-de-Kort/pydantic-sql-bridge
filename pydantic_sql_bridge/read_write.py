@@ -2,10 +2,10 @@ import sqlite3
 from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Type, Optional, Any
+from typing import Type, Optional, Any, TypeVar
 
 from pydantic import BaseModel
-from sqlglot import transpile, Dialects, parse_one
+from sqlglot import transpile, Dialects
 import sqlglot.expressions as exp
 
 from pydantic_sql_bridge.utils import Cursor, get_database_type, get_table_name, is_model
@@ -62,7 +62,10 @@ def build_model(grouped_selects: dict[str, dict[str, Any]], model_type: Type[Bas
     return model_type(**as_dict)
 
 
-def get_where(c: Cursor, model_type: Type[BaseModel], **constraints) -> list[BaseModel]:
+T = TypeVar('T', bound=BaseModel)
+
+
+def get_where(c: Cursor, model_type: Type[T], **constraints) -> list[T]:
     """
     Retrieve Pydantic models from a database using cursor c, potentially matching constraints.
     Example:
