@@ -21,12 +21,12 @@ def test_generate_models():
     expected = textwrap.dedent('''
     from pydantic import BaseModel
 
-    class Portfolio(BaseModel):
+    class PortfolioRow(BaseModel):
         sedol: str
         cluster: str
         n_invested: int
 
-    class Benchmark(BaseModel):
+    class BenchmarkRow(BaseModel):
         sedol: str
         name: str
         n_available: int

@@ -38,8 +38,12 @@ def model_hash(model: BaseModel) -> int:
     return content_hash(tuple((field, getattr(model, field)) for field in model.__fields__.keys()))
 
 
-def get_table_name(typ: type) -> str:
-    return typ.__name__[-3] if typ.__name__.endswith('Row') else typ.__name__
+def get_table_name(model_type: type) -> str:
+    return model_type.__name__[-3] if model_type.__name__.endswith('Row') else model_type.__name__
+
+
+def get_model_name(table_name: str) -> str:
+    return table_name.capitalize() + 'Row'
 
 
 def is_model(field: Field) -> bool:

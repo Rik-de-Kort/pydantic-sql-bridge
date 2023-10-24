@@ -1,5 +1,7 @@
 from sqlglot import parse_one, expressions as expr
 
+from pydantic_sql_bridge.utils import get_model_name
+
 SqlglotType = expr.DataType.Type
 SQLGLOT_TYPE_TO_PYDANTIC = {
     SqlglotType.INT: int,
@@ -31,7 +33,7 @@ def parse_create_table(sql_stmt) -> tuple[str, list[tuple[str, type]]]:
 
 def to_pydantic_model(sql_stmt) -> str:
     table_name, column_defs = parse_create_table(sql_stmt)
-    head = f'class {table_name.capitalize()}(BaseModel):\n'
+    head = f'class {get_model_name(table_name)}(BaseModel):\n'
     body = '\n'.join(f'    {name}: {typ.__name__}' for name, typ in column_defs)
     result = head + body
     return result
