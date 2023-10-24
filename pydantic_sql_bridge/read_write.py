@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlglot import transpile, Dialects
 import sqlglot.expressions as exp
 
-from pydantic_sql_bridge.utils import Cursor, get_database_type, get_table_name, is_model
+from pydantic_sql_bridge.utils import Cursor, get_database_type, get_table_name, is_model, get_primary_key
 
 
 @contextmanager
@@ -37,29 +37,10 @@ def build_query(model_type: Type[BaseModel]) -> exp.Select:
     table_name = get_table_name(model_type)
     result = exp.select().from_(table_name)
     for name, field in model_type.model_fields.items():
-        if not is_model(field):
-            result = result.select(f'{table_name}.{name}')
-        else:
-            sub_query = build_query(field.annotation)
-            sub_table = sub_query.args['from'].this
-            join_expr = exp.Join(this=sub_table, kind='inner')
-            for col in field.annotation.__id__:
-                join_expr = join_expr.on(f'{table_name}.{sub_table}_{col} = {sub_table}.{col}', append=True)
-            result = result.select(*sub_query.selects).join(join_expr, append=True)
-            for join_expr in sub_query.args.get('joins', []):
-                result = result.join(join_expr, append=True)
+        if is_model(field):
+            raise TypeError(f'Nested models not supported, field {name} is a Pydantic model.')
+        result = result.select(f'{table_name}.{name}')
     return result
-
-
-def build_model(grouped_selects: dict[str, dict[str, Any]], model_type: Type[BaseModel]) -> BaseModel:
-    model_name = get_table_name(model_type)
-    as_dict = {}
-    for name, field in model_type.model_fields.items():
-        if not is_model(field):
-            as_dict[name] = grouped_selects[model_name][name]
-        else:
-            as_dict[name] = build_model(grouped_selects, field.annotation)
-    return model_type(**as_dict)
 
 
 T = TypeVar('T', bound=BaseModel)
@@ -87,41 +68,17 @@ def get_where(c: Cursor, model_type: Type[T], **constraints) -> list[T]:
             query = query.where(f'{name} = ?', append=True)
         query_result = c.execute(query.sql(dialect=db_type.value), tuple(constraint_col_values)).fetchall()
 
-    result = []
-    for row in query_result:
-        # We don't push this selection grouping into build_model because it complicates the contract that the function
-        # assumes: in that case, all the fields would have to be aligned in terms of position, and we'd have to pass in
-        # the query. This is a bit cleaner.
-        grouped_selects = defaultdict(lambda: {})
-        for col, value in zip(query.selects, row):
-            grouped_selects[col.table][col.name] = value
-        result.append(build_model(grouped_selects, model_type))
-    return result
-
-
-def flatten_model(model: BaseModel) -> dict:
-    """Flatten a model into a dictionary, with the primary keys of all referring models pulled out."""
-    result = {}
-    for name, field in model.model_fields.items():
-        if not is_model(field):
-            result[name] = getattr(model, name)
-        else:
-            submodel = getattr(model, name)
-            if not hasattr(submodel, '__id__'):
-                raise TypeError(f'Cannot flatten {model} because {submodel} does not have attribute __id__')
-            table_name = get_table_name(type(submodel))
-            for subname in submodel.__id__:
-                result[f'{table_name}_{subname}'] = getattr(submodel, subname)
-    return result
+    result_dicts = [{col.name: value for col, value in zip(query.selects, row)} for row in query_result]
+    return [model_type(**d) for d in result_dicts]
 
 
 def write(
-        c: Cursor, models: list[BaseModel], compare_on: Optional[tuple[str]] = None, *,
+        c: Cursor, models: list[BaseModel], compare_on: Optional[tuple[str, ...]] = None, *,
         should_insert=True, should_update=True, should_delete=False
 ):
     """
     Write models `models` to the database with an open cursor `c`. Determine updating, deleting, or inserting using
-    the columns `compare_on`. If `compare_on` is not passed, we use the __id__ attribute on the models.
+    the columns `compare_on`. If `compare_on` is not passed, check the models for a primary key annotation
     By default, this will insert and update, but not delete.
     """
     if len(models) == 0:
@@ -130,16 +87,15 @@ def write(
         raise TypeError(f'Expected only one type of model in models, got {model_types}.')
 
     model_type = type(models[0])
-    if compare_on is None and not hasattr(model_type, '__id__'):
-        raise TypeError(f'Cannot skip passing compare_on when model {model_type} has no attribute __id__')
-    elif compare_on is None:
-        compare_on = model_type.__id__
+    compare_on = get_primary_key(model_type) if compare_on is None else compare_on
+    if not compare_on:
+        raise TypeError(f'Cannot skip passing compare_on when model {model_type} has no primary key annotations')
 
     if any(not_present := [name for name in compare_on if name not in model_type.model_fields]):
         raise TypeError(f'Fields {not_present} in compare_on are not present in model {model_type}')
 
     write_dict_models(
-        c, get_table_name(model_type), [flatten_model(model) for model in models], compare_on,
+        c, get_table_name(model_type), [model.model_dump() for model in models], compare_on,
         should_insert=should_insert, should_update=should_update, should_delete=should_delete
     )
 

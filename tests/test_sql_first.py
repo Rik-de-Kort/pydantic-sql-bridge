@@ -20,9 +20,11 @@ def test_generate_models():
 
     expected = textwrap.dedent('''
     from pydantic import BaseModel
+    from pydantic_sql_bridge.sql_first import Annotations
+    from typing import Annotated
 
     class PortfolioRow(BaseModel):
-        sedol: str
+        sedol: Annotated[str, Annotations.PRIMARY_KEY]
         cluster: str
         n_invested: int
 

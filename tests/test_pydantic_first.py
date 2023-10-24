@@ -1,22 +1,20 @@
 import textwrap
+from typing import Annotated
 
-import pytest
 from pydantic import BaseModel
-from pydantic_sql_bridge.pydantic_first import generate_sql, setup_database, get_fk_types
-from pydantic_sql_bridge.utils import DatabaseType
+from pydantic_sql_bridge.pydantic_first import generate_sql, setup_database
+from pydantic_sql_bridge.utils import DatabaseType, Annotations
 from pydantic_sql_bridge.read_write import cursor, raw_query
 
 
 class User(BaseModel):
-    __id__ = ('id',)
-    id: int
+    id: Annotated[int, Annotations.PRIMARY_KEY]
     name: str = 'Jane Doe'
 
 
 class CheckingAccount(BaseModel):
-    __id__ = ('account_name',)
-    account_name: str
-    user: User
+    account_name: Annotated[str, Annotations.PRIMARY_KEY]
+    user: int
     balance: float
 
 
@@ -30,9 +28,8 @@ def test_generate_sql_sqlite():
     
     CREATE TABLE CheckingAccount (
         account_name TEXT NOT NULL PRIMARY KEY, 
-        User_id INTEGER NOT NULL, 
-        balance REAL NOT NULL, 
-        FOREIGN KEY (User_id) REFERENCES User (id)
+        user INTEGER NOT NULL, 
+        balance REAL NOT NULL
     )
     ''').replace('    ', '')
     actual = generate_sql([User, CheckingAccount], database_type=DatabaseType.SQLITE)
@@ -51,33 +48,3 @@ def test_setup_database_sqlite():
         assert {'name': 'User', 'ncol': 2, 'type': 'table'}.items() <= db_schema['User'].items()
         assert {'name': 'CheckingAccount', 'ncol': 3, 'type': 'table'}.items() <= db_schema['CheckingAccount'].items()
 
-
-class CheckingAccountNoId(BaseModel):
-    account_name: str
-    user: User
-    balance: float
-
-
-class CheckingAccountTypoId(BaseModel):
-    __id__ = ('acount_name',)
-    account_name: str
-    user: User
-    balance: float
-
-
-class CheckingAccountModelId(BaseModel):
-    __id__ = ('user',)
-    account_name: str
-    user: User
-    balance: float
-
-
-def test_get_fk_types():
-    assert get_fk_types(User) == ('integer not null',)
-    assert get_fk_types(CheckingAccount) == ('text not null',)
-    with pytest.raises(TypeError):
-        get_fk_types(CheckingAccountNoId)
-    with pytest.raises(TypeError):
-        get_fk_types(CheckingAccountTypoId)
-    with pytest.raises(TypeError):
-        get_fk_types(CheckingAccountModelId)

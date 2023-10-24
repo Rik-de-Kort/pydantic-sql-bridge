@@ -46,6 +46,61 @@ with open('models.py') as handle:
 
 By default, Pydantic-SQL-bridge will generate models for all your tables. Support for views and arbitrary select queries is planned.
 
+The name of the generated model will be the name of your table, with 'Row' added to the end of it. This is how Pydantic-SQL-bridge knows which table to query when loading data.
+
+#### Example
+We set up a SQL table for portfolios and associated benchmark data.
+```sql
+CREATE TABLE Portfolio (
+    sedol NCHAR(7) PRIMARY KEY,
+    cluster NVARCHAR(50),
+    n_invested BIGINT
+)
+
+CREATE TABLE Benchmark (
+    sedol NCHAR(7),
+    name NVARCHAR(50),
+    n_available BIGINT,
+    is_reit BIT,
+    CONSTRAINT FK_Sedol FOREIGN KEY (sedol) REFERENCES portfolio(sedol)
+)
+```
+
+For this schema, Pydantic-SQL-bridge generates the following Python file.
+
+```python
+# models.py
+from pydantic import BaseModel
+from typing import Annotated
+from pydantic_sql_bridge.utils import Annotations
+
+
+class PortfolioRow(BaseModel):
+    sedol: Annotated[str, Annotations.PRIMARY_KEY]
+    cluster: str
+    n_invested: int
+   
+
+class BenchmarkRow(BaseModel):
+    sedol: str
+    name: str
+    n_available: int
+    is_reit: bool
+```
+
+You can then write to and query from the database as follows.
+
+```python
+from pydantic_sql_bridge.read_write import cursor, get_where, write
+from models import BenchmarkRow, PortfolioRow
+
+with cursor('localhost', ':memory:') as c:
+    write(c, [BenchmarkRow(sedol='AAAAAAA', name='Test', n_available=14, is_reit=False)], compare_on=('sedol',),
+          should_insert=True, should_update=True, should_delete=False)
+    benchmark = get_where(c, BenchmarkRow)
+    eu_retail_portfolio = get_where(c, PortfolioRow, cluster='Europe Retail')
+```
+
 ### Pydantic first
 
 Use this if you are setting up a new database.
@@ -104,7 +159,7 @@ Pydantic-SQL-bridge does not support directly writing nested models to and readi
 
 ```python
 from pydantic import BaseModel
-from pydantic_sql_bridge.nested import flatten, split
+from pydantic_sql_bridge.nested import split
 
 
 class Trade(BaseModel):
@@ -120,15 +175,6 @@ class CheckingAccount(BaseModel):
     last_transaction: Trade
 
 
-class FlattenedCheckingAccount(BaseModel):
-    id: int
-    name: str
-    balance: float
-    last_transaction_id: int
-    last_transaction_counterparty: str
-    last_transaction_amount: float
-
-
 class SplitCheckingAccount(BaseModel):
     id: int
     name: str
@@ -139,20 +185,12 @@ class SplitCheckingAccount(BaseModel):
 trade = Trade(id=0, counterparty='Alice', amount=-5)
 bobs_account = CheckingAccount(id=1, name='Bob', balance=100, last_transaction=trade)
 
-bobs_flattened_account = FlattenedCheckingAccount(
-    id=1, name='Bob', balance=100,
-    last_transaction_id=0, last_transaction_counterparty='Alice', last_transaction_amount=-5
-)
-assert bobs_flattened_account == flatten(bobs_account)
-
 bobs_split_account = SplitCheckingAccount(
     id=1, name='Bob', balance=100,
     last_transaction_id=0
 )
 assert bobs_split_account, trade == split(bobs_account, primary_key='id')
 ```
-
-Flatten seems pretty stupid tbh.
 
 "ORM" implies taking on object-oriented programming features like inheritance. This does not match with the database
 model, which is about sets of records, and relations between them. These paradigms don't match, and I think trying to
