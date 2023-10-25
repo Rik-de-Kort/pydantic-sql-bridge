@@ -1,11 +1,15 @@
 # Pydantic SQL Bridge 🌉
 
-SQL and Pydantic models, simplified. Get the benefits of developing with Pydantic while harnessing all the power your SQL database has to offer. You can read and write to most SQL databases like SQLite, PostgreSQL, MSSQL, and
+SQL and Pydantic models, simplified. Get the benefits of developing with Pydantic while harnessing all the power your
+SQL database has to offer. You can read and write to most SQL databases like SQLite, PostgreSQL, MSSQL, and
 MySQL.
 
-Pydantic-SQL-bridge generates Pydantic models for your database tables and the queries you write using those tables. It allows you to write type-safe Python and use query results in FastAPI apps without having to repeat your SQL schema in Python.
+Pydantic-SQL-bridge generates Pydantic models for your database tables and the queries you write using those tables. It
+allows you to write type-safe Python and use query results in FastAPI apps without having to repeat your SQL schema in
+Python.
 
-Pydantic-SQL-bridge can also translate your Pydantic models into SQL code, allowing you to easily spin up a new database. It will grow with your database usage, like when you start writing optimized queries. 
+Pydantic-SQL-bridge can also translate your Pydantic models into SQL code, allowing you to easily spin up a new
+database. It will grow with your database usage, like when you start writing optimized queries.
 
 ## Installation
 
@@ -21,7 +25,8 @@ There are two options for using Pydantic-SQL-bridge: SQL first, or Pydantic firs
 
 ### SQL first
 
-Use this if are generating your Pydantic models based on your database, for instance if someone else is maintaining the database. The primary way is to derive the models from the database directly, like so:
+Use this if are generating your Pydantic models based on your database, for instance if someone else is maintaining the
+database. The primary way is to derive the models from the database directly, like so:
 
 ```python
 from pydantic_sql_bridge.read_write import cursor
@@ -32,7 +37,9 @@ with cursor('local', 'sqlite') as c, open('models.py', 'w+') as handle:
     handle.write(create_models_from_db(c))
 ```
 
-Pydantic-SQL-bridge will generate a Python file that you can write to a location of your choosing. You can check this into your repo and get all the benefits of developing with Pydantic. If you have a repository of SQL statements that define your database schema, you can also read use that to generate the models.
+Pydantic-SQL-bridge will generate a Python file that you can write to a location of your choosing. You can check this
+into your repo and get all the benefits of developing with Pydantic. If you have a repository of SQL statements that
+define your database schema, you can also read use that to generate the models.
 
 ```python
 from pydantic_sql_bridge.sql_first import create_models_from_sql
@@ -44,12 +51,16 @@ with open('models.py') as handle:
     handle.write(create_models_from_sql(sql))
 ```
 
-By default, Pydantic-SQL-bridge will generate models for all your tables. Support for views and arbitrary select queries is planned.
+By default, Pydantic-SQL-bridge will generate models for all your tables. Support for views and arbitrary select queries
+is planned.
 
-The name of the generated model will be the name of your table, with 'Row' added to the end of it. This is how Pydantic-SQL-bridge knows which table to query when loading data.
+The name of the generated model will be the name of your table, with 'Row' added to the end of it. This is how
+Pydantic-SQL-bridge knows which table to query when loading data.
 
 #### Example
+
 We set up a SQL table for portfolios and associated benchmark data.
+
 ```sql
 CREATE TABLE Portfolio (
     sedol NCHAR(7) PRIMARY KEY,
@@ -79,7 +90,7 @@ class PortfolioRow(BaseModel):
     sedol: Annotated[str, Annotations.PRIMARY_KEY]
     cluster: str
     n_invested: int
-   
+
 
 class BenchmarkRow(BaseModel):
     sedol: str
@@ -128,7 +139,9 @@ with cursor('local', 'sqlite') as c:
     c.connection.commit()
 ```
 
-If you prefer to generate SQL to set up your database (for instance, if you are deploying the database separately, or you want to make manual adjustments), we can use `generate_sql`. Since we are not connecting to a database directly, we'll also have to tell Pydantic-SQL-bridge what`DatabaseType` you are using.
+If you prefer to generate SQL to set up your database (for instance, if you are deploying the database separately, or
+you want to make manual adjustments), we can use `generate_sql`. Since we are not connecting to a database directly,
+we'll also have to tell Pydantic-SQL-bridge what`DatabaseType` you are using.
 
 ```python
 from pydantic import BaseModel
@@ -151,49 +164,74 @@ with open('table_definitions.sql', 'w+') as handle:
     handle.write(sql)
 ```
 
-## Notes from the maintainers
+## Notes and remarks
+
+### Why can't I control my database using just Pydantic-SQL-bridge?
+
+SQL is a much older technology than Python (and certainly Pydantic!), and is much more widespread. Pretty much every
+programming language has a way of talking with SQL databases, and databases tend to outlive their associated
+applications. SQL skills are one of the few things you can invest in for an almost guaranteed benefit, wherever your
+software journey takes you. Trying to control the database from Python is rather putting the cart before the horse.
+
+It doesn't help that Python "things" are *objects*, which you can nest (like when you
+have [`Foo` as an attribute of `Spam`](https://docs.pydantic.dev/latest/concepts/models/#nested-models)), and which
+can "do stuff" ( like when you call `model.model_dump()`).  "Things" in SQL databases are *relations*, which you cannot
+nest, and which cannot do stuff (they are "just data"), so you cannot easily translate between those two worlds. There
+do exist packages (called Object-Relational-Mappers or ORM's) that try to let you do this, such
+as [SQLAlchemy](https://www.sqlalchemy.org/). If you go that way, you need to rely on the ORM's maintainers to implement
+support for the database features you need, rather than just using the database however you want. And the skills you
+learn are not transferable: if your next project is in C#, you cannot use SQLAlchemy.
+
+Pydantic-SQL-bridge's solution is to start from SQL and adapt our Python code around it. Of course we help you get
+started using just Python, but these are training wheels. If you need something different from your database, you have
+the chance to learn some SQL, and we will help you make sense of it on the Python end.
 
 ### Nested models
 
-Pydantic-SQL-bridge does not support directly writing nested models to and reading them from your database: it encourages you to work more directly with the database and the capabilities it has to offer. It does offer utilities for nesting and un-nesting models.
+Pydantic-SQL-bridge does not support directly writing nested models to and reading them from your database: it
+encourages you to work more directly with the database and the capabilities it has to offer. It does offer a utility for
+nesting and unnesting models, to more easily translate between your application's models and the ones generated by
+Pydantic-SQL-bridge.
 
 ```python
 from pydantic import BaseModel
-from pydantic_sql_bridge.nested import split
+from typing import ClassVar
+
+from pydantic_sql_bridge.read_write import cursor, get_where, write
+from pydantic_sql_bridge.utils import transform
 
 
-class Trade(BaseModel):
-    id: int
-    counterparty: str
-    amount: float
-
-
-class CheckingAccount(BaseModel):
+class First(BaseModel):
     id: int
     name: str
-    balance: float
-    last_transaction: Trade
 
 
-class SplitCheckingAccount(BaseModel):
+class Second(BaseModel):
     id: int
-    name: str
-    balance: float
-    last_transaction_id: int
+    score: float
 
 
-trade = Trade(id=0, counterparty='Alice', amount=-5)
-bobs_account = CheckingAccount(id=1, name='Bob', balance=100, last_transaction=trade)
+class Nested(BaseModel):
+    id: int
+    first: First
+    second: Second
 
-bobs_split_account = SplitCheckingAccount(
-    id=1, name='Bob', balance=100,
-    last_transaction_id=0
-)
-assert bobs_split_account, trade == split(bobs_account, primary_key='id')
+
+class Flat(BaseModel):
+    query_name: ClassVar[str] = 'example'
+    id: int
+    first_id: int
+    first_name: str
+    second_id: int
+    second_score: float
+
+
+targets = [Nested(id=0, first=First(id=0, name='alice'), second=Second(id=1, score=-5.21)),
+           Nested(id=1, first=First(id=1, name='bob'), second=Second(id=2, score=348.7))]
+
+with cursor('localhost', ':memory:') as c:
+    write(c, [transform(target, Flat) for target in targets])
+    query_result = get_where(c, Flat)
+
+targets: list[Nested] = [transform(r, Nested) for r in query_result]
 ```
-
-"ORM" implies taking on object-oriented programming features like inheritance. This does not match with the database
-model, which is about sets of records, and relations between them. These paradigms don't match, and I think trying to
-map them (ORM stands for "Object-Relational Mapper") is a mistake.
-See [here](https://blog.codinghorror.com/object-relational-mapping-is-the-vietnam-of-computer-science/) for an in-depth
-explanation.
