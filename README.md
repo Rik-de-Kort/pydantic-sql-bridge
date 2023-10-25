@@ -24,7 +24,7 @@ There are two options for using Pydantic-SQL-bridge: SQL first, or Pydantic firs
 Use this if are generating your Pydantic models based on your database, for instance if someone else is maintaining the database. The primary way is to derive the models from the database directly, like so:
 
 ```python
-from pydantic_sql_bridge.utils import cursor
+from pydantic_sql_bridge.read_write import cursor
 from pydantic_sql_bridge.sql_first import create_models_from_db
 
 with cursor('local', 'sqlite') as c, open('models.py', 'w+') as handle:
@@ -105,11 +105,11 @@ with cursor('localhost', ':memory:') as c:
 
 Use this if you are setting up a new database.
 
-To setup a database according to our Pydantic models, we import `cursor` and `setup_database`.
+To set up a database according to our Pydantic models, we import `cursor` and `setup_database`.
 
 ```python
 from pydantic import BaseModel
-from pydantic_sql_bridge.utils import cursor
+from pydantic_sql_bridge.read_write import cursor
 from pydantic_sql_bridge.pydantic_first import setup_database
 
 
@@ -128,7 +128,7 @@ with cursor('local', 'sqlite') as c:
     c.connection.commit()
 ```
 
-If you prefer to generate SQL to setup your database (for instance, if you are deploying the database separately, or you want to make manual adjustments), we can use `generate_sql`. Since we are not connecting to a database directly, we'll also have to tell Pydantic-SQL-bridge what`DatabaseType` you are using.
+If you prefer to generate SQL to set up your database (for instance, if you are deploying the database separately, or you want to make manual adjustments), we can use `generate_sql`. Since we are not connecting to a database directly, we'll also have to tell Pydantic-SQL-bridge what`DatabaseType` you are using.
 
 ```python
 from pydantic import BaseModel

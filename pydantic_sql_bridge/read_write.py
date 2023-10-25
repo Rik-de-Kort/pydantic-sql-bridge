@@ -1,5 +1,4 @@
 import sqlite3
-from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Type, Optional, Any, TypeVar
@@ -105,7 +104,7 @@ def write_dict_models(
         should_insert=True, should_update=True, should_delete=False
 ):
     database_type = get_database_type(c)
-    get_id = lambda model: tuple(model[field] for field in compare_on)
+    get_id = lambda model: tuple(model[field] for field in compare_on)  # noqa
 
     sql_columns = ', '.join(compare_on)
     in_db = set(c.execute(f'select {sql_columns} from {table_name}').fetchall())

@@ -4,7 +4,7 @@ from typing import Type
 from pydantic import BaseModel
 from sqlglot import transpile, Dialects
 
-from pydantic_sql_bridge.utils import DatabaseType, get_database_type, Cursor, get_table_name, is_model, get_primary_key
+from pydantic_sql_bridge.utils import DatabaseType, get_database_type, Cursor, get_table_name, get_primary_key
 
 
 def translate_type(typ: type) -> str:
