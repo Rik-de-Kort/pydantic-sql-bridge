@@ -1,8 +1,11 @@
 # Pydantic SQL Bridge 🌉
 
-SQL and Pydantic models, simplified. Maintain straightforward one-to-one mappings between database tables and Pydantic
-models, without the baggage of an ORM. You can read and write to most SQL databases like SQLite, PostgreSQL, MSSQL, and
+SQL and Pydantic models, simplified. Get the benefits of developing with Pydantic while harnessing all the power your SQL database has to offer. You can read and write to most SQL databases like SQLite, PostgreSQL, MSSQL, and
 MySQL.
+
+Pydantic-SQL-bridge generates Pydantic models for your database tables and the queries you write using those tables. It allows you to write type-safe Python and use query results in FastAPI apps without having to repeat your SQL schema in Python.
+
+Pydantic-SQL-bridge can also translate your Pydantic models into SQL code, allowing you to easily spin up a new database. It will grow with your database usage, like when you start writing optimized queries. 
 
 ## Installation
 
@@ -14,17 +17,99 @@ pip install pydantic-sql-bridge
 
 ## How to use
 
-There are two options for using Pydantic-SQL-bridge: Pydantic first, or SQL first.
+There are two options for using Pydantic-SQL-bridge: SQL first, or Pydantic first.
+
+### SQL first
+
+Use this if are generating your Pydantic models based on your database, for instance if someone else is maintaining the database. The primary way is to derive the models from the database directly, like so:
+
+```python
+from pydantic_sql_bridge.read_write import cursor
+from pydantic_sql_bridge.sql_first import create_models_from_db
+
+with cursor('local', 'sqlite') as c, open('models.py', 'w+') as handle:
+    handle.write('# GENERATED FILE')
+    handle.write(create_models_from_db(c))
+```
+
+Pydantic-SQL-bridge will generate a Python file that you can write to a location of your choosing. You can check this into your repo and get all the benefits of developing with Pydantic. If you have a repository of SQL statements that define your database schema, you can also read use that to generate the models.
+
+```python
+from pydantic_sql_bridge.sql_first import create_models_from_sql
+
+with open('table_definitions.sql', 'r') as handle:
+    sql = handle.read().split('\n\n')
+
+with open('models.py') as handle:
+    handle.write(create_models_from_sql(sql))
+```
+
+By default, Pydantic-SQL-bridge will generate models for all your tables. Support for views and arbitrary select queries is planned.
+
+The name of the generated model will be the name of your table, with 'Row' added to the end of it. This is how Pydantic-SQL-bridge knows which table to query when loading data.
+
+#### Example
+We set up a SQL table for portfolios and associated benchmark data.
+```sql
+CREATE TABLE Portfolio (
+    sedol NCHAR(7) PRIMARY KEY,
+    cluster NVARCHAR(50),
+    n_invested BIGINT
+)
+
+CREATE TABLE Benchmark (
+    sedol NCHAR(7),
+    name NVARCHAR(50),
+    n_available BIGINT,
+    is_reit BIT,
+    CONSTRAINT FK_Sedol FOREIGN KEY (sedol) REFERENCES portfolio(sedol)
+)
+```
+
+For this schema, Pydantic-SQL-bridge generates the following Python file.
+
+```python
+# models.py
+from pydantic import BaseModel
+from typing import Annotated
+from pydantic_sql_bridge.utils import Annotations
+
+
+class PortfolioRow(BaseModel):
+    sedol: Annotated[str, Annotations.PRIMARY_KEY]
+    cluster: str
+    n_invested: int
+   
+
+class BenchmarkRow(BaseModel):
+    sedol: str
+    name: str
+    n_available: int
+    is_reit: bool
+```
+
+You can then write to and query from the database as follows.
+
+```python
+from pydantic_sql_bridge.read_write import cursor, get_where, write
+from models import BenchmarkRow, PortfolioRow
+
+with cursor('localhost', ':memory:') as c:
+    write(c, [BenchmarkRow(sedol='AAAAAAA', name='Test', n_available=14, is_reit=False)], compare_on=('sedol',),
+          should_insert=True, should_update=True, should_delete=False)
+    benchmark = get_where(c, BenchmarkRow)
+    eu_retail_portfolio = get_where(c, PortfolioRow, cluster='Europe Retail')
+```
 
 ### Pydantic first
 
-Use this if you are setting up a new database, and want to control your database schema from your Pydantic models.
+Use this if you are setting up a new database.
 
-To setup a database according to our Pydantic models, we import `cursor` and `setup_database`.
+To set up a database according to our Pydantic models, we import `cursor` and `setup_database`.
 
 ```python
 from pydantic import BaseModel
-from pydantic_sql_bridge.utils import cursor
+from pydantic_sql_bridge.read_write import cursor
 from pydantic_sql_bridge.pydantic_first import setup_database
 
 
@@ -43,9 +128,7 @@ with cursor('local', 'sqlite') as c:
     c.connection.commit()
 ```
 
-If you prefer to generate SQL to setup your database (for instance, if you are deploying the database separately, or you
-want to make manual adjustments), we can use `generate_sql`. Since we are not connecting to a database directly, we'll
-also have to tell Pydantic-SQL-bridge what`DatabaseType` you are using.
+If you prefer to generate SQL to set up your database (for instance, if you are deploying the database separately, or you want to make manual adjustments), we can use `generate_sql`. Since we are not connecting to a database directly, we'll also have to tell Pydantic-SQL-bridge what`DatabaseType` you are using.
 
 ```python
 from pydantic import BaseModel
@@ -68,66 +151,46 @@ with open('table_definitions.sql', 'w+') as handle:
     handle.write(sql)
 ```
 
-### SQL first
-Note: this feature is not available yet.
-
-Use this if you prefer to generate your Pydantic models based on your database, for instance if someone else is
-maintaining the database. The primary way is to derive the models from the database directly, like so:
-
-```python
-from pydantic_sql_bridge.utils import cursor
-from pydantic_sql_bridge.sql_first import create_models_from_db
-
-with cursor('local', 'sqlite') as c:
-    create_models_from_db(c, filename='models.py')
-```
-
-Pydantic-SQL-bridge will generate a `models.py` file in your current directory (you can of course modify the
-filename/path). You can check this into your repo and get all the benefits of developing with Pydantic.
-
-If you have a repository of SQL statements that define your database schema, you can also read use that to generate the
-models.
-
-```python
-from pydantic_sql_bridge.sql_first import create_models_from_sql
-
-with open('table_definitions.sql', 'r') as handle:
-    sql = handle.read()
-
-create_models_from_sql(sql, filename='models.py')
-```
-
 ## Notes from the maintainers
 
 ### Nested models
 
+Pydantic-SQL-bridge does not support directly writing nested models to and reading them from your database: it encourages you to work more directly with the database and the capabilities it has to offer. It does offer utilities for nesting and un-nesting models.
+
 ```python
 from pydantic import BaseModel
+from pydantic_sql_bridge.nested import split
 
 
 class Trade(BaseModel):
-    __id__ = ('id',)
     id: int
-    counterparty: int
+    counterparty: str
     amount: float
 
 
 class CheckingAccount(BaseModel):
     id: int
+    name: str
     balance: float
     last_transaction: Trade
+
+
+class SplitCheckingAccount(BaseModel):
+    id: int
+    name: str
+    balance: float
+    last_transaction_id: int
+
+
+trade = Trade(id=0, counterparty='Alice', amount=-5)
+bobs_account = CheckingAccount(id=1, name='Bob', balance=100, last_transaction=trade)
+
+bobs_split_account = SplitCheckingAccount(
+    id=1, name='Bob', balance=100,
+    last_transaction_id=0
+)
+assert bobs_split_account, trade == split(bobs_account, primary_key='id')
 ```
-
-If you have nested models, Pydantic-SQL-bridge will put the models in separate tables, and retrieve them as needed.
-It is necessary to tell Pydantic-SQL-bridge which fields identify the nested model. You do this by setting the `__id__`
-attribute.
-
-This feature is still in development. Pydantic-SQL-bridge already gets nested models correctly from the database,
-but writing still has to be done per model.
-The `__id__` attribute is also not so nice to use. In the future Pydantic-SQL-bridge will include helpers to make this
-easier.
-
-## Why not an ORM?
 
 "ORM" implies taking on object-oriented programming features like inheritance. This does not match with the database
 model, which is about sets of records, and relations between them. These paradigms don't match, and I think trying to
