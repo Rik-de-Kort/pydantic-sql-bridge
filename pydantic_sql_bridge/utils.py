@@ -14,12 +14,15 @@ class DatabaseType(Enum):
 Cursor = sqlite3.Cursor
 
 
-def get_database_type(c: Cursor) -> DatabaseType:
+def get_database_type(_c: Cursor) -> DatabaseType:
     return DatabaseType.SQLITE
 
 
 def get_table_name(model_type: type) -> str:
-    return model_type.__name__[:-3] if model_type.__name__.endswith('Row') else model_type.__name__
+    if hasattr(model_type, 'query_name'):
+        return model_type.query_name
+    else:
+        return model_type.__name__
 
 
 def get_model_name(table_name: str) -> str:

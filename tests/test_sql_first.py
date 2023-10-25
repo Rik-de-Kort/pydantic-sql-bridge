@@ -21,14 +21,16 @@ def test_generate_models():
     expected = textwrap.dedent('''
     from pydantic import BaseModel
     from pydantic_sql_bridge.sql_first import Annotations
-    from typing import Annotated
+    from typing import Annotated, ClassVar
 
     class PortfolioRow(BaseModel):
+        query_name: ClassVar[str] = "Portfolio"
         sedol: Annotated[str, Annotations.PRIMARY_KEY]
         cluster: str
         n_invested: int
 
     class BenchmarkRow(BaseModel):
+        query_name: ClassVar[str] = "Benchmark"
         sedol: str
         name: str
         n_available: int

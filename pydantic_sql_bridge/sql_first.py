@@ -36,18 +36,18 @@ def parse_create_table(sql_stmt) -> tuple[str, list[tuple[str, str]]]:
 
 def to_pydantic_model(sql_stmt) -> str:
     table_name, column_defs = parse_create_table(sql_stmt)
-    head = f'class {get_model_name(table_name)}(BaseModel):\n'
-    body = '\n'.join(f'    {name}: {typ}' for name, typ in column_defs)
-    result = head + body
+    head = [f'class {get_model_name(table_name)}(BaseModel):',
+            f'    query_name: ClassVar[str] = "{table_name}"']
+    result = '\n'.join(head + [f'    {name}: {typ}' for name, typ in column_defs])
     return result
 
 
 def create_models_from_sql(sql: list[str]) -> str:
     to_join = [
-        'from pydantic import BaseModel\n'
-        'from pydantic_sql_bridge.sql_first import Annotations\n'
-        'from typing import Annotated'
-    ] + [
-        to_pydantic_model(sql_stmt) for sql_stmt in sql
-    ]
+                  'from pydantic import BaseModel\n'
+                  'from pydantic_sql_bridge.sql_first import Annotations\n'
+                  'from typing import Annotated, ClassVar'
+              ] + [
+                  to_pydantic_model(sql_stmt) for sql_stmt in sql
+              ]
     return '\n\n'.join(to_join)
