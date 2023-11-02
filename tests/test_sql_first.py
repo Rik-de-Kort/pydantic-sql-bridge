@@ -6,7 +6,7 @@ from pydantic_sql_bridge.sql_first import create_models_from_sql
 def test_generate_models():
     portfolio_sql = '''CREATE TABLE Portfolio (
         sedol NCHAR(7) PRIMARY KEY,
-        cluster NVARCHAR(50),
+        cluster NVARCHAR(50) NULL,
         n_invested BIGINT
         CONSTRAINT FK_Sedol FOREIGN KEY (sedol) REFERENCES benchmark(sedol)
     )'''
@@ -27,12 +27,12 @@ def test_generate_models():
     expected = textwrap.dedent('''
     from pydantic import BaseModel
     from pydantic_sql_bridge.utils import Annotations
-    from typing import Annotated, ClassVar
+    from typing import Annotated, ClassVar, Optional
 
     class PortfolioRow(BaseModel):
         query_name: ClassVar[str] = "Portfolio"
         sedol: Annotated[str, Annotations.PRIMARY_KEY]
-        cluster: str
+        cluster: Optional[str]
         n_invested: int
 
     class BenchmarkRow(BaseModel):

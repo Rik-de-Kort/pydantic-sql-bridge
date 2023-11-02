@@ -21,9 +21,16 @@ SQLGLOT_TYPE_TO_PYDANTIC = {
 def transform_column_def(col_def: expr.ColumnDef) -> tuple[str, str]:
     name = col_def.this.this
     pydantic_type = SQLGLOT_TYPE_TO_PYDANTIC[col_def.args['kind'].this]
+
+    to_apply = deque()
     for constraint in col_def.args.get('constraints', []):
+        if isinstance(constraint.kind, expr.NotNullColumnConstraint) and constraint.kind.args['allow_null']:
+            to_apply.appendleft(lambda typ: f'Optional[{typ}]')
         if isinstance(constraint.kind, expr.PrimaryKeyColumnConstraint):
-            pydantic_type = f'Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]'
+            to_apply.append(lambda typ: f'Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]')
+
+    for transform in to_apply:
+        pydantic_type = transform(pydantic_type)
     return name, pydantic_type
 
 
@@ -92,7 +99,7 @@ def create_models_from_sql(sql: list[str]) -> str:
     to_join = [
         'from pydantic import BaseModel\n'
         'from pydantic_sql_bridge.utils import Annotations\n'
-        'from typing import Annotated, ClassVar'
+        'from typing import Annotated, ClassVar, Optional'
     ]
 
     model_names = []
