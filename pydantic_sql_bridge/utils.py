@@ -1,7 +1,7 @@
 import sqlite3
 from enum import Enum
 from pydantic import BaseModel, Field
-from typing import Type, TypeVar, Union, Any
+from typing import Type, TypeVar, Union, Any, Literal
 
 from sqlglot import Dialects
 
@@ -53,7 +53,7 @@ def get_primary_key(model: Type[BaseModel]) -> tuple[str, ...]:
 NOT_FOUND = object()  # sentinel
 
 
-def lookup_underscored(source: dict, target_name: str) -> Union[NOT_FOUND, Any]:
+def lookup_underscored(source: dict, target_name: str) -> Union[Literal[NOT_FOUND], Any]:
     if target_name in source.keys():
         return source[target_name]
     matches = [name for name, field in source.items() if target_name.startswith(name)]

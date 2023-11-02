@@ -1,6 +1,7 @@
 from collections import deque
 from typing import Type, Annotated, ClassVar, Optional
 
+import sqlglot.dialects
 from pydantic import BaseModel
 from sqlglot import parse_one, expressions as expr
 
@@ -89,8 +90,8 @@ def to_pydantic_model(sql_expr: expr.Create) -> str:
     return result
 
 
-def create_models_from_sql(sql: list[str]) -> str:
-    sql_exprs = [parse_one(sql_stmt) for sql_stmt in sql]
+def create_models_from_sql(sql: list[str], dialect: sqlglot.Dialects = sqlglot.dialects.SQLite) -> str:
+    sql_exprs = [parse_one(sql_stmt, dialect=dialect) for sql_stmt in sql]
     if any(non_create_exprs := [sql_expr for sql_expr in sql_exprs if not isinstance(sql_expr, expr.Create)]):
         raise ValueError(f'Cannot parse {non_create_exprs} because they do not appear to be valid create expressions')
     view_exprs = [sql_expr for sql_expr in sql_exprs if sql_expr.args['kind'] == 'VIEW']
