@@ -1,4 +1,5 @@
-from typing import Type, Annotated, ClassVar
+from collections import deque
+from typing import Type, Annotated, ClassVar, Optional
 
 from pydantic import BaseModel
 from sqlglot import parse_one, expressions as expr
@@ -9,6 +10,7 @@ SqlglotType = expr.DataType.Type
 SQLGLOT_TYPE_TO_PYDANTIC = {
     SqlglotType.INT: 'int',
     SqlglotType.TEXT: 'str',
+    SqlglotType.CHAR: 'str',
     SqlglotType.BIT: 'bool',
     SqlglotType.NCHAR: 'str',
     SqlglotType.NVARCHAR: 'str',
@@ -27,12 +29,21 @@ def transform_column_def(col_def: expr.ColumnDef) -> tuple[str, str]:
 
 def parse_create_table(sql_expr: expr.Create) -> tuple[str, list[tuple[str, str]]]:
     if not isinstance(sql_expr, expr.Create):
-        raise ValueError(f'Statement not recognized as create table statement {sql_stmt=}')
+        raise ValueError(f'Statement not recognized as create table statement {sql_expr=}')
 
     table_name = sql_expr.this.this.this.this
-    column_defs = [transform_column_def(col_def)
-                   for col_def in sql_expr.this.expressions
-                   if isinstance(col_def, expr.ColumnDef)]
+    column_defs = []
+    for sql_col_def in sql_expr.this.expressions:
+        if not isinstance(sql_col_def, expr.ColumnDef):
+            continue
+        if any(
+                isinstance(constraint.kind, expr.GeneratedAsRowColumnConstraint) and constraint.kind.args['hidden']
+                for constraint in sql_col_def.constraints
+        ):
+            continue
+
+        col_def = transform_column_def(sql_col_def)
+        column_defs.append(col_def)
     return table_name, column_defs
 
 
