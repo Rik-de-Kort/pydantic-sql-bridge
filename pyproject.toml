@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pydantic-sql-bridge"
-version = "0.0.2"
+version = "0.0.3"
 description = "A simple bridge between SQL databases and Pydantic"
 authors = ["Rik <rik.de.kort@hey.com>"]
 license = "MIT"
