@@ -1,5 +1,3 @@
-from collections import deque
-
 import sqlglot.dialects
 from sqlglot import parse_one, expressions as exp
 
@@ -22,24 +20,34 @@ SQLGLOT_TYPE_TO_PYDANTIC = {
     SqlglotType.TEXT: "str",
 }
 
+COLUMN_DEFINITION_TRANSFORMERS = {
+    "optional": lambda typ: f"typing.Optional[{typ}]",
+    "primary_key": lambda typ: f"typing.Annotated[{typ}, Annotations.PRIMARY_KEY]",
+}
 
-def transform_column_def(col_def: exp.ColumnDef) -> tuple[str, str]:
+
+def transform_column_def(
+    col_def: exp.ColumnDef, primary_key: set[str]
+) -> tuple[str, str]:
+    primary_key = set() if primary_key is None else primary_key
     name = col_def.this.this
     pydantic_type = SQLGLOT_TYPE_TO_PYDANTIC[col_def.args["kind"].this]
 
-    to_apply = deque()
+    to_apply = set()
     for constraint in col_def.args.get("constraints", []):
         if isinstance(
             constraint.kind, exp.NotNullColumnConstraint
         ) and constraint.kind.args.get("allow_null", False):
-            to_apply.appendleft(lambda typ: f"typing.Optional[{typ}]")
+            to_apply.add("optional")
         if isinstance(constraint.kind, exp.PrimaryKeyColumnConstraint):
-            to_apply.append(
-                lambda typ: f"typing.Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]"
-            )
+            to_apply.add("primary_key")
 
-    for transform in to_apply:
-        pydantic_type = transform(pydantic_type)
+    if name in primary_key:
+        to_apply.add("primary_key")
+
+    for key, transform in COLUMN_DEFINITION_TRANSFORMERS.items():
+        if key in to_apply:
+            pydantic_type = transform(pydantic_type)
     return name, pydantic_type
 
 
@@ -48,6 +56,13 @@ def parse_create_table(sql_expr: exp.Create) -> tuple[str, list[tuple[str, str]]
         raise ValueError(
             f"Statement not recognized as create table statement {sql_expr=}"
         )
+
+    pk_columns = [
+        set(entry.this for entry in expr.expressions)
+        for expr in sql_expr.this.expressions
+        if isinstance(expr, exp.PrimaryKey)
+    ]
+    primary_key = set.union(*pk_columns) if pk_columns else set()
 
     table_name = sql_expr.this.this.this.this
     column_defs = []
@@ -61,7 +76,7 @@ def parse_create_table(sql_expr: exp.Create) -> tuple[str, list[tuple[str, str]]
         ):
             continue
 
-        col_def = transform_column_def(sql_col_def)
+        col_def = transform_column_def(sql_col_def, primary_key)
         column_defs.append(col_def)
     return table_name, column_defs
 
