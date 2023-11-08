@@ -19,14 +19,14 @@ def get_database_type(_c: Cursor) -> DatabaseType:
 
 
 def get_table_name(model_type: type) -> str:
-    if hasattr(model_type, 'query_name'):
+    if hasattr(model_type, "query_name"):
         return model_type.query_name
     else:
         return model_type.__name__
 
 
 def get_model_name(table_name: str) -> str:
-    return ''.join(word.capitalize() for word in table_name.split('_')) + 'Row'
+    return "".join(word.capitalize() for word in table_name.split("_")) + "Row"
 
 
 def is_model(field: Field) -> bool:
@@ -39,7 +39,7 @@ def is_model(field: Field) -> bool:
 
 
 class Annotations(Enum):
-    PRIMARY_KEY = 'PK'
+    PRIMARY_KEY = "PK"
 
 
 def get_primary_key(model: Type[BaseModel]) -> tuple[str, ...]:
@@ -53,18 +53,27 @@ def get_primary_key(model: Type[BaseModel]) -> tuple[str, ...]:
 NOT_FOUND = object()  # sentinel
 
 
-def lookup_underscored(source: dict, target_name: str) -> Union[Literal[NOT_FOUND], Any]:
+def lookup_underscored(
+    source: dict, target_name: str
+) -> Union[Literal[NOT_FOUND], Any]:
     if target_name in source.keys():
         return source[target_name]
     matches = [name for name, field in source.items() if target_name.startswith(name)]
-    results = [lookup_underscored(source[name], target_name.removeprefix(f'{name}_')) for name in matches]
+    results = [
+        lookup_underscored(source[name], target_name.removeprefix(f"{name}_"))
+        for name in matches
+    ]
     found = [r for r in results if r is not NOT_FOUND]
-    if len(found) == 0: return NOT_FOUND
-    if len(found) > 1: raise ValueError(f'Ambiguous name matches for {target_name} on {source}, got {results}.')
+    if len(found) == 0:
+        return NOT_FOUND
+    if len(found) > 1:
+        raise ValueError(
+            f"Ambiguous name matches for {target_name} on {source}, got {results}."
+        )
     return found[0]
 
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar("T", bound=BaseModel)
 
 
 def transform_dict(data: dict, target: Type[T]) -> dict:
@@ -78,17 +87,23 @@ def transform_dict(data: dict, target: Type[T]) -> dict:
         if target_field_name in data:
             result[target_field_name] = data[target_field_name]
         elif is_model(target_field):
-            field_prefix = target_field.annotation.__name__.lower() + '_'
-            field_source = {k.removeprefix(field_prefix): v for k, v in data.items() if k.startswith(field_prefix)}
-            result[target_field_name] = transform_dict(field_source, target_field.annotation)
+            field_prefix = target_field.annotation.__name__.lower() + "_"
+            field_source = {
+                k.removeprefix(field_prefix): v
+                for k, v in data.items()
+                if k.startswith(field_prefix)
+            }
+            result[target_field_name] = transform_dict(
+                field_source, target_field.annotation
+            )
         else:
             result[target_field_name] = lookup_underscored(data, target_field_name)
             if result[target_field_name] == NOT_FOUND:
-                errors.append(KeyError(f'Cannot find {target_field_name} in {data}.'))
+                errors.append(KeyError(f"Cannot find {target_field_name} in {data}."))
     if len(errors) == 1:
         raise errors[0]
     elif errors:
-        raise ExceptionGroup(f'Some names cannot be found', errors)
+        raise ExceptionGroup(f"Some names cannot be found", errors)
     return result
 
 
@@ -98,13 +113,15 @@ def dict_to_model(data: dict, model: Type[T]) -> T:
     for target_name, target_field in model.model_fields.items():
         if is_model(target_field):
             try:
-                data[target_name] = dict_to_model(data[target_name], target_field.annotation)
+                data[target_name] = dict_to_model(
+                    data[target_name], target_field.annotation
+                )
             except Exception as e:
                 errors.append(e)
     if len(errors) == 1:
         raise errors[0]
     elif errors:
-        raise ExceptionGroup(f'Could not build model {model} from {data}', errors)
+        raise ExceptionGroup(f"Could not build model {model} from {data}", errors)
     return model(**data)
 
 
@@ -115,4 +132,3 @@ def transform(model: BaseModel, target: Type[T]) -> T:
     """
     target_dict = transform_dict(model.model_dump(), target)
     return dict_to_model(target_dict, target)
-
