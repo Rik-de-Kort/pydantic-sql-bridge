@@ -9,13 +9,14 @@ from pydantic_sql_bridge.utils import get_model_name, get_table_name, Annotation
 
 SqlglotType = expr.DataType.Type
 SQLGLOT_TYPE_TO_PYDANTIC = {
-    SqlglotType.INT: 'int',
-    SqlglotType.TEXT: 'str',
-    SqlglotType.CHAR: 'str',
+    SqlglotType.BIGINT: 'int',
     SqlglotType.BIT: 'bool',
+    SqlglotType.CHAR: 'str',
+    SqlglotType.INT: 'int',
     SqlglotType.NCHAR: 'str',
     SqlglotType.NVARCHAR: 'str',
-    SqlglotType.BIGINT: 'int',
+    SqlglotType.TEXT: 'str',
+    SqlglotType.VARCHAR: 'str',
 }
 
 
@@ -25,7 +26,7 @@ def transform_column_def(col_def: expr.ColumnDef) -> tuple[str, str]:
 
     to_apply = deque()
     for constraint in col_def.args.get('constraints', []):
-        if isinstance(constraint.kind, expr.NotNullColumnConstraint) and constraint.kind.args['allow_null']:
+        if isinstance(constraint.kind, expr.NotNullColumnConstraint) and constraint.kind.args.get('allow_null'):
             to_apply.appendleft(lambda typ: f'Optional[{typ}]')
         if isinstance(constraint.kind, expr.PrimaryKeyColumnConstraint):
             to_apply.append(lambda typ: f'Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]')
@@ -45,7 +46,7 @@ def parse_create_table(sql_expr: expr.Create) -> tuple[str, list[tuple[str, str]
         if not isinstance(sql_col_def, expr.ColumnDef):
             continue
         if any(
-                isinstance(constraint.kind, expr.GeneratedAsRowColumnConstraint) and constraint.kind.args['hidden']
+                isinstance(constraint.kind, expr.GeneratedAsRowColumnConstraint) and constraint.kind.args.get('hidden')
                 for constraint in sql_col_def.constraints
         ):
             continue

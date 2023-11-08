@@ -1,9 +1,29 @@
 import textwrap
 
-from pydantic_sql_bridge.sql_first import create_models_from_sql
+from sqlglot import parse_one, Dialects
+
+from pydantic_sql_bridge.sql_first import create_models_from_sql, parse_create_table
 
 
-def test_generate_models():
+def test_generate_models_tsql():
+    sql = '''
+    CREATE TABLE "test" ("name" CHAR (7) NOT NULL, "internal_id" VARCHAR(10) NOT NULL, UNIQUE NONCLUSTERED ("internal_id" ASC))
+    '''
+    expected = textwrap.dedent('''
+    from pydantic import BaseModel
+    from pydantic_sql_bridge.utils import Annotations
+    from typing import Annotated, ClassVar, Optional
+
+    class TestRow(BaseModel):
+        query_name: ClassVar[str] = "test"
+        name: str
+        internal_id: str
+    ''')
+    actual = create_models_from_sql([sql], dialect=Dialects.TSQL)
+    assert actual.replace('\n', '').strip() == expected.replace('\n', '').strip()
+
+
+def test_generate_models_straightforward():
     portfolio_sql = '''CREATE TABLE Portfolio (
         sedol NCHAR(7) PRIMARY KEY,
         cluster NVARCHAR(50) NULL,
