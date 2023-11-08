@@ -1,6 +1,7 @@
 from collections import deque
 import datetime
-from typing import Type, Annotated, ClassVar, Optional
+import typing
+from typing import Type
 
 import sqlglot.dialects
 from pydantic import BaseModel
@@ -33,9 +34,9 @@ def transform_column_def(col_def: expr.ColumnDef) -> tuple[str, str]:
     to_apply = deque()
     for constraint in col_def.args.get('constraints', []):
         if isinstance(constraint.kind, expr.NotNullColumnConstraint) and constraint.kind.args.get('allow_null', False):
-            to_apply.appendleft(lambda typ: f'Optional[{typ}]')
+            to_apply.appendleft(lambda typ: f'typing.Optional[{typ}]')
         if isinstance(constraint.kind, expr.PrimaryKeyColumnConstraint):
-            to_apply.append(lambda typ: f'Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]')
+            to_apply.append(lambda typ: f'typing.Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]')
 
     for transform in to_apply:
         pydantic_type = transform(pydantic_type)
@@ -62,24 +63,44 @@ def parse_create_table(sql_expr: expr.Create) -> tuple[str, list[tuple[str, str]
     return table_name, column_defs
 
 
+def parse_first_table_name(sql_expr: expr.Expression) -> str:
+    if isinstance(sql_expr, expr.Column):
+        return sql_expr.table
+    else:
+        results = [node for node, parent, key in sql_expr.walk() if isinstance(node, expr.Column)]
+        if not results:
+            raise ValueError(f'Cannot find column definition to get table from in {sql_expr}')
+        return results[0].table
+
+
+def annotation_to_name(annotation: Type) -> str:
+    if annotation in (str, bool, int, float):
+        return annotation.__name__
+    return str(annotation)
+
+
 # Todo: refactor this to take a dictionary of {table_name: (column_name, column_typestring)} instead of models
 def parse_create_view_joined(sql_expr: expr.Create, models: list[Type[BaseModel]]) -> tuple[str, list[tuple[str, str]]]:
     join_source = sql_expr.expression.args['from']
 
-    alias_to_name = {join_source.this.alias: join_source.this.this.this} | {join.this.alias: join.this.this.this for
-                                                                            join in sql_expr.expression.args['joins']}
+    alias_to_name = {join_source.this.alias_or_name: join_source.this.this.this}
+    alias_to_name |= {join.this.alias_or_name: join.this.this.this for join in sql_expr.expression.args['joins']}
     name_to_model = {get_table_name(model): model for model in models}
     alias_to_model = {alias: name_to_model.get(name) for alias, name in alias_to_name.items()}
 
     columns = sql_expr.expression.expressions
-    if any(missing_aliases := {col.table for col in columns if col.table not in alias_to_model}):
+    tables = [parse_first_table_name(col) for col in columns]
+    if any(missing_aliases := {table for table in tables if table not in alias_to_model}):
         matching_names = {alias: alias_to_name.get(alias) for alias in missing_aliases}
         raise ValueError(f'Cannot translate aliases {missing_aliases} to models. '
                          f'Got name matches {matching_names} and models {name_to_model}')
+
     column_defs = []
-    for col in columns:
-        col_name = col.this.this
-        col_model = alias_to_model[col.table].model_fields[col_name].annotation.__name__
+    for col, table in zip(columns, tables):
+        col_name = col.this
+        while not isinstance(col_name, str):  # Todo: should we parse this out properly?
+            col_name = col_name.this
+        col_model = annotation_to_name(alias_to_model[table].model_fields[col_name].annotation)
         column_defs.append((col_name, col_model))
 
     view_name = sql_expr.this.this.this
@@ -92,7 +113,7 @@ def to_pydantic_model(sql_expr: expr.Create) -> str:
     else:
         table_name, column_defs = parse_create_table(sql_expr)
     head = [f'class {get_model_name(table_name)}(BaseModel):',
-            f'    query_name: ClassVar[str] = "{table_name}"']
+            f'    query_name: typing.ClassVar[str] = "{table_name}"']
     result = '\n'.join(head + [f'    {name}: {typ}' for name, typ in column_defs])
     return result
 
@@ -107,7 +128,7 @@ def create_models_from_sql(sql: list[str], dialect: sqlglot.Dialects = sqlglot.d
     to_join = [
         'from pydantic import BaseModel\n'
         'from pydantic_sql_bridge.utils import Annotations\n'
-        'from typing import Annotated, ClassVar, Optional'
+        'import typing'
     ]
 
     model_names = []
@@ -116,7 +137,7 @@ def create_models_from_sql(sql: list[str], dialect: sqlglot.Dialects = sqlglot.d
         model_name = get_model_name(table_name)
 
         head = [f'class {model_name}(BaseModel):',
-                f'    query_name: ClassVar[str] = "{table_name}"']
+                f'    query_name: typing.ClassVar[str] = "{table_name}"']
         model_code = '\n'.join(head + [f'    {name}: {typ}' for name, typ in column_defs])
         to_join.append(model_code)
         if 'datetime' in model_code and 'datetime' not in to_join[0]:
@@ -137,8 +158,8 @@ def create_models_from_sql(sql: list[str], dialect: sqlglot.Dialects = sqlglot.d
         model_name = get_model_name(view_name)
 
         head = [f'class {model_name}(BaseModel):',
-                f'    query_name: ClassVar[str] = "{view_name}"']
+                f'    query_name: typing.ClassVar[str] = "{view_name}"']
         model_code = '\n'.join(head + [f'    {name}: {typ}' for name, typ in column_defs])
         to_join.append(model_code)
 
-    return '\n\n'.join(to_join)
+    return '\n\n\n'.join(to_join) + '\n'

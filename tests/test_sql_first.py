@@ -12,10 +12,10 @@ def test_generate_models_tsql():
     expected = textwrap.dedent('''
     from pydantic import BaseModel
     from pydantic_sql_bridge.utils import Annotations
-    from typing import Annotated, ClassVar, Optional
+    import typing
 
     class TestRow(BaseModel):
-        query_name: ClassVar[str] = "test"
+        query_name: typing.ClassVar[str] = "test"
         name: str
         internal_id: str
     ''')
@@ -47,23 +47,23 @@ def test_generate_models_straightforward():
     expected = textwrap.dedent('''
     from pydantic import BaseModel
     from pydantic_sql_bridge.utils import Annotations
-    from typing import Annotated, ClassVar, Optional
+    import typing
 
     class PortfolioRow(BaseModel):
-        query_name: ClassVar[str] = "Portfolio"
-        sedol: Annotated[str, Annotations.PRIMARY_KEY]
-        cluster: Optional[str]
+        query_name: typing.ClassVar[str] = "Portfolio"
+        sedol: typing.Annotated[str, Annotations.PRIMARY_KEY]
+        cluster: typing.Optional[str]
         n_invested: int
 
     class BenchmarkRow(BaseModel):
-        query_name: ClassVar[str] = "Benchmark"
-        sedol: Annotated[str, Annotations.PRIMARY_KEY]
+        query_name: typing.ClassVar[str] = "Benchmark"
+        sedol: typing.Annotated[str, Annotations.PRIMARY_KEY]
         name: str
         n_available: int
         is_reit: bool
         
     class MasterRow(BaseModel):
-        query_name: ClassVar[str] = "master"
+        query_name: typing.ClassVar[str] = "master"
         sedol: str
         name: str
         n_invested: int
