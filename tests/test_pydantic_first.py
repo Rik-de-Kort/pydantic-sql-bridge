@@ -9,7 +9,7 @@ from pydantic_sql_bridge.read_write import cursor, raw_query
 
 class User(BaseModel):
     id: Annotated[int, Annotations.PRIMARY_KEY]
-    name: str = 'Jane Doe'
+    name: str = "Jane Doe"
 
 
 class CheckingAccount(BaseModel):
@@ -20,7 +20,8 @@ class CheckingAccount(BaseModel):
 
 def test_generate_sql_sqlite():
     # Note: spaces after commas here are very important
-    expected = textwrap.dedent('''
+    expected = textwrap.dedent(
+        """
     CREATE TABLE User (
         id INTEGER NOT NULL PRIMARY KEY, 
         name TEXT NOT NULL
@@ -31,9 +32,13 @@ def test_generate_sql_sqlite():
         user INTEGER NOT NULL, 
         balance REAL NOT NULL
     )
-    ''').replace('    ', '')
+    """
+    ).replace("    ", "")
     actual = generate_sql([User, CheckingAccount], database_type=DatabaseType.SQLITE)
-    assert actual.lower().replace('\n', '').strip() == expected.lower().replace('\n', '').strip()
+    assert (
+        actual.lower().replace("\n", "").strip()
+        == expected.lower().replace("\n", "").strip()
+    )
 
 
 def test_generate_sql_mssql():
@@ -42,9 +47,14 @@ def test_generate_sql_mssql():
 
 
 def test_setup_database_sqlite():
-    with cursor(':memory:') as c:
+    with cursor(":memory:") as c:
         setup_database(c, [User, CheckingAccount])
-        db_schema = {r['name']: r for r in raw_query(c, 'PRAGMA table_list')}
-        assert {'name': 'User', 'ncol': 2, 'type': 'table'}.items() <= db_schema['User'].items()
-        assert {'name': 'CheckingAccount', 'ncol': 3, 'type': 'table'}.items() <= db_schema['CheckingAccount'].items()
-
+        db_schema = {r["name"]: r for r in raw_query(c, "PRAGMA table_list")}
+        assert {"name": "User", "ncol": 2, "type": "table"}.items() <= db_schema[
+            "User"
+        ].items()
+        assert {
+            "name": "CheckingAccount",
+            "ncol": 3,
+            "type": "table",
+        }.items() <= db_schema["CheckingAccount"].items()

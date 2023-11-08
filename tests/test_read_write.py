@@ -19,7 +19,7 @@ def test_roundtrip_simple():
         Trade(id=0, counterparty=1, amount=1.0),
         Trade(id=1, counterparty=0, amount=2.0),
     ]
-    with cursor(':memory:') as c:
+    with cursor(":memory:") as c:
         setup_database(c, [Trade])
         write(c, transactions)
         result = get_where(c, Trade)
@@ -27,5 +27,7 @@ def test_roundtrip_simple():
 
 
 def test_build_query():
-    expected = exp.select('Trade.id', 'Trade.counterparty', 'Trade.amount').from_('Trade')
+    expected = exp.select("Trade.id", "Trade.counterparty", "Trade.amount").from_(
+        "Trade"
+    )
     assert build_query(Trade) == expected

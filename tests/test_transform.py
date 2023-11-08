@@ -35,9 +35,13 @@ class Mixed(BaseModel):
 
 
 def test_transform():
-    nested = Nested(id=0, first=First(id=0, name='alice'), second=Second(id=1, score=-5.21))
-    flat = Flat(id=0, first_id=0, first_name='alice', second_id=1, second_score=-5.21)
-    mixed = Mixed(id=0, first_id=0, first_name='alice', second=Second(id=1, score=-5.21))
+    nested = Nested(
+        id=0, first=First(id=0, name="alice"), second=Second(id=1, score=-5.21)
+    )
+    flat = Flat(id=0, first_id=0, first_name="alice", second_id=1, second_score=-5.21)
+    mixed = Mixed(
+        id=0, first_id=0, first_name="alice", second=Second(id=1, score=-5.21)
+    )
     assert transform(flat, Flat) == flat
     assert transform(flat, Mixed) == mixed
     assert transform(flat, Nested) == nested
