@@ -26,7 +26,7 @@ def get_table_name(model_type: type) -> str:
 
 
 def get_model_name(table_name: str) -> str:
-    return table_name.capitalize() + 'Row'
+    return ''.join(word.capitalize() for word in table_name.split('_')) + 'Row'
 
 
 def is_model(field: Field) -> bool:
