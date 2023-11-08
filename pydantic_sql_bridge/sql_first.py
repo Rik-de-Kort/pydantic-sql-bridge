@@ -1,4 +1,5 @@
 from collections import deque
+import datetime
 from typing import Type, Annotated, ClassVar, Optional
 
 import sqlglot.dialects
@@ -12,11 +13,16 @@ SQLGLOT_TYPE_TO_PYDANTIC = {
     SqlglotType.BIGINT: 'int',
     SqlglotType.BIT: 'bool',
     SqlglotType.CHAR: 'str',
+    SqlglotType.DATE: 'datetime.date',
+    SqlglotType.DATETIME: 'datetime.datetime',
+    SqlglotType.DECIMAL: 'float',
+    SqlglotType.FLOAT: 'float',
     SqlglotType.INT: 'int',
     SqlglotType.NCHAR: 'str',
     SqlglotType.NVARCHAR: 'str',
-    SqlglotType.TEXT: 'str',
+    SqlglotType.SMALLINT: 'int',
     SqlglotType.VARCHAR: 'str',
+    SqlglotType.TEXT: 'str',
 }
 
 
@@ -26,7 +32,7 @@ def transform_column_def(col_def: expr.ColumnDef) -> tuple[str, str]:
 
     to_apply = deque()
     for constraint in col_def.args.get('constraints', []):
-        if isinstance(constraint.kind, expr.NotNullColumnConstraint) and constraint.kind.args.get('allow_null'):
+        if isinstance(constraint.kind, expr.NotNullColumnConstraint) and constraint.kind.args.get('allow_null', False):
             to_apply.appendleft(lambda typ: f'Optional[{typ}]')
         if isinstance(constraint.kind, expr.PrimaryKeyColumnConstraint):
             to_apply.append(lambda typ: f'Annotated[{pydantic_type}, Annotations.PRIMARY_KEY]')
@@ -113,6 +119,8 @@ def create_models_from_sql(sql: list[str], dialect: sqlglot.Dialects = sqlglot.d
                 f'    query_name: ClassVar[str] = "{table_name}"']
         model_code = '\n'.join(head + [f'    {name}: {typ}' for name, typ in column_defs])
         to_join.append(model_code)
+        if 'datetime' in model_code and 'datetime' not in to_join[0]:
+            to_join[0] = 'import datetime\n' + to_join[0]
 
         # Make sure we can find these models in our views later
         # Todo: ideally of course you map this properly or something...
