@@ -93,7 +93,7 @@ def test_generate_models_straightforward():
     )"""
 
     master_sql = """CREATE VIEW master AS
-    SELECT p.sedol, b.name, p.n_invested, b.n_available
+    SELECT p.sedol, b.name AS company_name, p.n_invested, b.n_available
     FROM Portfolio p
     JOIN Benchmark b ON p.sedol = b.sedol
     """
@@ -120,7 +120,7 @@ def test_generate_models_straightforward():
     class MasterRow(BaseModel):
         query_name: typing.ClassVar[str] = "master"
         sedol: str
-        name: str
+        company_name: str
         n_invested: int
         n_available: int
     """

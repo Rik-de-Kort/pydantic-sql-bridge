@@ -141,7 +141,7 @@ def parse_create_view(
         while not isinstance(col_name, str):  # Todo: should we parse this out properly?
             col_name = col_name.this
         col_model = strip_annotations(alias_to_model[table][col_name])
-        column_defs.append((col_name, col_model))
+        column_defs.append((col.alias_or_name, col_model))
 
     view_name = sql_expr.this.this.this
     return view_name, column_defs
