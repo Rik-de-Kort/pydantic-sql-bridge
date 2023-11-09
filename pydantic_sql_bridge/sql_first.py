@@ -1,3 +1,5 @@
+import re
+
 import sqlglot.dialects
 from sqlglot import parse_one, expressions as exp
 
@@ -104,8 +106,6 @@ def parse_first_table_name(sql_expr: exp.Expression) -> str:
 
 
 def strip_annotations(typ: str) -> str:
-    import re
-
     match = re.match(r"typing.Annotated\[(.*), .*]", typ)
     if match:
         typ = match[1]
@@ -117,14 +117,13 @@ def parse_create_view(
 ) -> tuple[str, list[tuple[str, str]]]:
     join_source = sql_expr.expression.args["from"]
 
-    alias_to_name = {join_source.this.alias_or_name: join_source.this.this.this}
-    alias_to_name |= {
-        join.this.alias_or_name: join.this.this.this
+    alias_to_name_and_side = {join_source.this.alias_or_name: (join_source.this.this.this, None)}
+    alias_to_name_and_side |= {
+        join.this.alias_or_name: (join.this.this.this, join.side)
         for join in sql_expr.expression.args["joins"]
     }
-    alias_to_model = {alias: models.get(name) for alias, name in alias_to_name.items()}
-
-    # Todo: check if join is a left join, so items should be optional when they don't have a default value.
+    alias_to_model = {alias: models.get(name) for alias, (name, side) in alias_to_name_and_side.items()}
+    optional_aliases = {alias for alias, (name, side) in alias_to_name_and_side.items() if side == "LEFT"}
 
     columns = sql_expr.expression.expressions
     tables = [parse_first_table_name(col) for col in columns]
@@ -143,6 +142,8 @@ def parse_create_view(
         while not isinstance(col_name, str):  # Todo: should we parse this out properly?
             col_name = col_name.this
         col_model = strip_annotations(alias_to_model[table][col_name])
+        if table in optional_aliases and not re.match(r'typing.Optional', col_model):
+            col_model = f'typing.Optional[{col_model}]'
         column_defs.append((col.alias_or_name, col_model))
 
     view_name = sql_expr.this.this.this

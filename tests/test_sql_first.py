@@ -95,7 +95,7 @@ def test_generate_models_straightforward():
     master_sql = """CREATE VIEW master AS
     SELECT p.sedol, b.name AS company_name, p.n_invested, b.n_available
     FROM Portfolio p
-    JOIN Benchmark b ON p.sedol = b.sedol
+    LEFT JOIN Benchmark b ON p.sedol = b.sedol
     """
 
     expected = textwrap.dedent(
@@ -120,10 +120,11 @@ def test_generate_models_straightforward():
     class MasterRow(BaseModel):
         query_name: typing.ClassVar[str] = "master"
         sedol: str
-        company_name: str
+        company_name: typing.Optional[str]
         n_invested: int
-        n_available: int
+        n_available: typing.Optional[int]
     """
     )
     actual = create_models_from_sql([portfolio_sql, benchmark_sql, master_sql])
     assert actual.replace("\n", "").strip() == expected.replace("\n", "").strip()
+
