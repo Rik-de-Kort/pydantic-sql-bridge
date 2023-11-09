@@ -26,7 +26,7 @@ def test_generate_models_tsql():
     assert actual.replace("\n", "").strip() == expected.replace("\n", "").strip()
 
 
-def test_separate_primary_key():
+def test_separate_primary_key_unnamed_tsql():
     portfolio_sql = """CREATE TABLE Portfolio (
         sedol NCHAR(7),
         n_invested BIGINT,
@@ -40,6 +40,32 @@ def test_separate_primary_key():
     import typing
     
     
+    class PortfolioRow(BaseModel):
+        query_name: typing.ClassVar[str] = "Portfolio"
+        sedol: typing.Annotated[str, Annotations.PRIMARY_KEY]
+        n_invested: int
+        """
+    )
+
+    actual = create_models_from_sql([portfolio_sql], dialect=Dialects.TSQL)
+    assert actual.replace("\n", "").strip() == expected.replace("\n", "").strip()
+
+
+def test_separate_primary_key_named_tsql():
+    portfolio_sql = """CREATE TABLE Portfolio (
+        sedol CHAR(7), 
+        n_invested BIGINT,
+        CONSTRAINT PK_portfolio PRIMARY KEY CLUSTERED (sedol ASC)
+     )
+    """
+
+    expected = textwrap.dedent(
+        """
+    from pydantic import BaseModel
+    from pydantic_sql_bridge.utils import Annotations
+    import typing
+
+
     class PortfolioRow(BaseModel):
         query_name: typing.ClassVar[str] = "Portfolio"
         sedol: typing.Annotated[str, Annotations.PRIMARY_KEY]

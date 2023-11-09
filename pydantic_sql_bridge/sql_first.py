@@ -62,6 +62,12 @@ def parse_create_table(sql_expr: exp.Create) -> tuple[str, list[tuple[str, str]]
         for expr in sql_expr.this.expressions
         if isinstance(expr, exp.PrimaryKey)
     ]
+
+    named_constraints = [expr for expr in sql_expr.this.expressions if isinstance(expr, exp.Constraint)]
+    pk_constraints = [expr for expr in named_constraints if any(isinstance(sub_expr, exp.PrimaryKeyColumnConstraint) for sub_expr in expr.expressions)]
+    pk_names = [node.this.this for expr in pk_constraints for node, parent, key in expr.walk() if isinstance(node, exp.Column)]
+    pk_columns.append(set(pk_names))
+
     primary_key = set.union(*pk_columns) if pk_columns else set()
 
     table_name = sql_expr.this.this.this.this
