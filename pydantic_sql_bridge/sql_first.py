@@ -124,6 +124,8 @@ def parse_create_view(
     }
     alias_to_model = {alias: models.get(name) for alias, name in alias_to_name.items()}
 
+    # Todo: check if join is a left join, so items should be optional when they don't have a default value.
+
     columns = sql_expr.expression.expressions
     tables = [parse_first_table_name(col) for col in columns]
     if any(
@@ -132,7 +134,7 @@ def parse_create_view(
         matching_names = {alias: alias_to_name.get(alias) for alias in missing_aliases}
         raise ValueError(
             f"Cannot translate aliases {missing_aliases} to models. "
-            f"Got name matches {matching_names} and models {name_to_model}"
+            f"Got name matches {matching_names} and models {alias_to_model}"
         )
 
     column_defs = []
