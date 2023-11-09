@@ -14,8 +14,10 @@ class DatabaseType(Enum):
 Cursor = sqlite3.Cursor
 
 
-def get_database_type(_c: Cursor) -> DatabaseType:
-    return DatabaseType.SQLITE
+def get_database_type(c: Cursor) -> DatabaseType:
+    if isinstance(c, sqlite3.Cursor):
+        return DatabaseType.SQLITE
+    return DatabaseType.MSSQL
 
 
 def get_table_name(model_type: type) -> str:
