@@ -47,7 +47,7 @@ def test_generate_sql_mssql():
 
 
 def test_setup_database_sqlite():
-    with cursor(":memory:") as c:
+    with cursor("localhost", ":memory:") as c:
         setup_database(c, [User, CheckingAccount])
         db_schema = {r["name"]: r for r in raw_query(c, "PRAGMA table_list")}
         assert {"name": "User", "ncol": 2, "type": "table"}.items() <= db_schema[

@@ -1,10 +1,7 @@
-import sqlite3
-from contextlib import contextmanager
-from pathlib import Path
 from typing import Type, Optional, Any, TypeVar
 
+from pggm_datalab_utils import db
 from pydantic import BaseModel
-from sqlglot import transpile, Dialects
 import sqlglot.expressions as exp
 
 from pydantic_sql_bridge.utils import (
@@ -15,22 +12,11 @@ from pydantic_sql_bridge.utils import (
     get_primary_key,
 )
 
-
-@contextmanager
-def cursor(db_name: str | Path) -> Cursor:
-    conn = sqlite3.connect(db_name)
-    c = conn.cursor()
-    try:
-        yield c
-    finally:
-        try:
-            c.close()
-        finally:
-            conn.close()
+cursor = db.cursor
 
 
 def raw_query(
-    c: Cursor, sql: str, data: Optional[tuple] = None
+        c: Cursor, sql: str, data: Optional[tuple] = None
 ) -> list[dict[str, Any]]:
     if data:
         result = c.execute(sql, data).fetchall()
@@ -63,9 +49,9 @@ def get_where(c: Cursor, model_type: Type[T], **constraints) -> list[T]:
     [User(id=24, name='Jane Doe')]
     """
     if any(
-        not_found := [
-            col for col in constraints.keys() if col not in model_type.model_fields
-        ]
+            not_found := [
+                col for col in constraints.keys() if col not in model_type.model_fields
+            ]
     ):
         raise TypeError(f"columns {not_found} not found in model {model_type}")
 
@@ -91,13 +77,13 @@ def get_where(c: Cursor, model_type: Type[T], **constraints) -> list[T]:
 
 
 def write(
-    c: Cursor,
-    models: list[BaseModel],
-    compare_on: Optional[tuple[str, ...]] = None,
-    *,
-    should_insert=True,
-    should_update=True,
-    should_delete=False,
+        c: Cursor,
+        models: list[BaseModel],
+        compare_on: Optional[tuple[str, ...]] = None,
+        *,
+        should_insert=True,
+        should_update=True,
+        should_delete=False,
 ):
     """
     Write models `models` to the database with an open cursor `c`. Determine updating, deleting, or inserting using
@@ -121,82 +107,20 @@ def write(
         )
 
     if any(
-        not_present := [
-            name for name in compare_on if name not in model_type.model_fields
-        ]
+            not_present := [
+                name for name in compare_on if name not in model_type.model_fields
+            ]
     ):
         raise TypeError(
             f"Fields {not_present} in compare_on are not present in model {model_type}"
         )
 
-    write_dict_models(
+    db.write(
         c,
         get_table_name(model_type),
         [model.model_dump() for model in models],
         compare_on,
-        should_insert=should_insert,
-        should_update=should_update,
-        should_delete=should_delete,
+        insert=should_insert,
+        update=should_update,
+        delete=should_delete,
     )
-
-
-def write_dict_models(
-    c: Cursor,
-    table_name: str,
-    models: list[dict[str, Any]],
-    compare_on: tuple[str],
-    *,
-    should_insert=True,
-    should_update=True,
-    should_delete=False,
-):
-    database_type = get_database_type(c)
-    get_id = lambda model: tuple(model[field] for field in compare_on)  # noqa
-
-    sql_columns = ", ".join(compare_on)
-    in_db = set(c.execute(f"select {sql_columns} from {table_name}").fetchall())
-    in_memory = {get_id(model) for model in models}
-
-    fields = tuple(models[0].keys())
-    if (to_insert := in_memory - in_db) and should_insert:
-        # We call them "columns" when they're in a sql string, "fields" otherwise
-        sql_columns = ", ".join(fields)
-        question_marks = ", ".join("?" for _ in fields)
-        sql = f"INSERT INTO {table_name}({sql_columns}) VALUES ({question_marks})"
-
-        insert_data = [
-            tuple(model[field] for field in fields)
-            for model in models
-            if get_id(model) in to_insert
-        ]
-        c.executemany(
-            "\n".join(transpile(sql, Dialects.SQLITE, database_type.value)), insert_data
-        )
-
-    if (to_update := in_memory & in_db) and should_update:
-        cols_and_question_marks = ", ".join(f"{field}=?" for field in fields)
-        keys_and_question_marks = " AND ".join(f"{col}=?" for col in compare_on)
-        sql = f"UPDATE {table_name} SET {cols_and_question_marks} WHERE {keys_and_question_marks}"
-
-        update_data = [
-            tuple(model[field] for field in fields)
-            + tuple(model[field] for field in compare_on)
-            for model in models
-            if get_id(model) in to_update
-        ]
-        c.executemany(
-            "\n".join(transpile(sql, Dialects.SQLITE, database_type.value)), update_data
-        )
-
-    if (to_delete := in_db - in_memory) and should_delete:
-        cols_and_question_marks = "AND ".join(f"{col}=?" for col in compare_on)
-        sql = f"DELETE FROM {table_name} WHERE {cols_and_question_marks}"
-
-        delete_data = [
-            tuple(model[field] for field in compare_on)
-            for model in models
-            if get_id(model) in to_delete
-        ]
-        c.executemany(
-            "\n".join(transpile(sql, Dialects.SQLITE, database_type.value)), delete_data
-        )

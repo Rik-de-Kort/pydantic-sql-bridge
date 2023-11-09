@@ -1,3 +1,4 @@
+import os
 from typing import Annotated
 
 from pydantic import BaseModel
@@ -6,6 +7,8 @@ from sqlglot import expressions as exp
 from pydantic_sql_bridge.read_write import cursor, get_where, write, build_query
 from pydantic_sql_bridge.pydantic_first import setup_database
 from pydantic_sql_bridge.utils import Annotations
+
+os.environ['DB_DRIVER'] = 'SQLITE'
 
 
 class Trade(BaseModel):
@@ -19,7 +22,7 @@ def test_roundtrip_simple():
         Trade(id=0, counterparty=1, amount=1.0),
         Trade(id=1, counterparty=0, amount=2.0),
     ]
-    with cursor(":memory:") as c:
+    with cursor("localhost", ":memory:") as c:
         setup_database(c, [Trade])
         write(c, transactions)
         result = get_where(c, Trade)
