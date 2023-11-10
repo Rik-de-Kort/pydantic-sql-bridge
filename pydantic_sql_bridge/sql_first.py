@@ -112,38 +112,81 @@ def strip_annotations(typ: str) -> str:
     return typ
 
 
+def get_optional_tables_and_aliases(select: exp.Select) -> set[str]:
+    """Find which tables might have NULL rows in them due to join structuring.
+    i.e. with LEFT JOIN, the right-hand side of the join might consist of entirely NULL values
+    """
+    base = select.args["from"]
+    joins = select.args["joins"]
+    optional, seen = set(), {base}
+    for join in joins:
+        if join.side == "RIGHT":
+            optional |= seen
+        elif join.side == "LEFT":
+            optional.add(join.this.name)
+            if join.this.alias:
+                optional.add(join.this.alias)
+        elif join.side == "FULL":
+            optional = (
+                {base.name}
+                | {b.alias for b in [base] if b.alias}
+                | {join.this.name for join in joins}
+                | {join.this.alias for join in joins if join.this.alias}
+            )
+
+        seen.add(join.this.name)
+        if join.this.alias:
+            seen.add(join.this.alias)
+    return optional
+
+
+def parse_select_col(col: exp.Expression) -> tuple[str, tuple[str, str], bool]:
+    if isinstance(col, exp.Alias):
+        name = col.alias
+        _, type_source, not_nullable = parse_select_col(col.this)
+    elif isinstance(col, exp.Coalesce):
+        name, type_source, not_nullable = parse_select_col(col.this)
+        fallbacks = [parse_select_col(e) for e in col.expressions]
+        not_nullable = any(
+            not_nullable for name, type_source, not_nullable in fallbacks
+        )
+    elif isinstance(col, exp.Column):
+        name = col.name
+        type_source = col.table, col.name
+        not_nullable = False
+    elif isinstance(col, exp.Null):
+        name, type_source, not_nullable = "", ("", ""), False
+    elif isinstance(col, exp.Literal):
+        name, type_source, not_nullable = "", ("", ""), True
+    else:
+        raise ValueError(f"Unsupported column type {type(col)}: {col}")
+    return name, type_source, not_nullable
+
+
 def parse_create_view(
     sql_expr: exp.Create, models: dict[str, dict[str, str]]
 ) -> tuple[str, list[tuple[str, str]]]:
     join_source = sql_expr.expression.args["from"]
-
-    alias_to_name_and_side = {join_source.this.alias_or_name: (join_source.this.this.this, None)}
-    alias_to_name_and_side |= {
-        join.this.alias_or_name: (join.this.this.this, join.side)
+    alias_to_model = {join_source.alias_or_name: models.get(join_source.this.name)} | {
+        join.this.alias_or_name: models.get(join.this.name)
         for join in sql_expr.expression.args["joins"]
     }
-    alias_to_model = {alias: models.get(name) for alias, (name, side) in alias_to_name_and_side.items()}
-    optional_aliases = {alias for alias, (name, side) in alias_to_name_and_side.items() if side == "LEFT"}
 
     columns = sql_expr.expression.expressions
     tables = [parse_first_table_name(col) for col in columns]
     if any(
         missing_aliases := {table for table in tables if table not in alias_to_model}
     ):
-        matching_names = {alias: alias_to_name.get(alias) for alias in missing_aliases}
-        raise ValueError(
-            f"Cannot translate aliases {missing_aliases} to models. "
-            f"Got name matches {matching_names} and models {alias_to_model}"
-        )
+        raise ValueError(f"Cannot translate aliases {missing_aliases} to models.")
+
+    optional = get_optional_tables_and_aliases(sql_expr.expression)
 
     column_defs = []
     for col, table in zip(columns, tables):
-        col_name = col.this
-        while not isinstance(col_name, str):  # Todo: should we parse this out properly?
-            col_name = col_name.this
-        col_model = strip_annotations(alias_to_model[table][col_name])
-        if table in optional_aliases and not re.match(r'typing.Optional', col_model):
-            col_model = f'typing.Optional[{col_model}]'
+        col_name, (source_table, source_col), has_non_null_fallback = parse_select_col(col)
+        col_model = strip_annotations(alias_to_model[source_table][source_col])
+        if table in optional and not re.match(r"typing.Optional", col_model) and not has_non_null_fallback:
+            col_model = f"typing.Optional[{col_model}]"
         column_defs.append((col.alias_or_name, col_model))
 
     view_name = sql_expr.this.this.this
