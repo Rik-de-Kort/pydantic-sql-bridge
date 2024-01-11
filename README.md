@@ -5,11 +5,11 @@ SQL database has to offer. You can read and write to most SQL databases like SQL
 MySQL.
 
 Pydantic-SQL-bridge generates Pydantic models for your database tables and the queries you write using those tables. It
-allows you to write type-safe Python and use query results in FastAPI apps without having to repeat your SQL schema in
+allows you to write type-safe Python and use query results in FastAPI apps without having to re-write your SQL schema in
 Python.
 
 Pydantic-SQL-bridge can also translate your Pydantic models into SQL code, allowing you to easily spin up a new
-database. It will grow with your database usage, like when you start writing optimized queries.
+database. It will grow with your database usage, like when you start writing optimized SQL queries.
 
 ## Installation
 
@@ -20,44 +20,7 @@ pip install pydantic-sql-bridge
 ```
 
 ## How to use
-
-There are two options for using Pydantic-SQL-bridge: SQL first, or Pydantic first.
-
-### SQL first
-
-Use this if are generating your Pydantic models based on your database, for instance if someone else is maintaining the
-database. The primary way is to derive the models from the database directly, like so:
-
-```python
-from pydantic_sql_bridge.read_write import cursor
-from pydantic_sql_bridge.sql_first import create_models_from_db
-
-with cursor('local', 'sqlite') as c, open('models.py', 'w+') as handle:
-    handle.write('# GENERATED FILE')
-    handle.write(create_models_from_db(c))
-```
-
-Pydantic-SQL-bridge will generate a Python file that you can write to a location of your choosing. You can check this
-into your repo and get all the benefits of developing with Pydantic. If you have a repository of SQL statements that
-define your database schema, you can also read use that to generate the models.
-
-```python
-from pydantic_sql_bridge.sql_first import create_models_from_sql
-
-with open('table_definitions.sql', 'r') as handle:
-    sql = handle.read().split('\n\n')
-
-with open('models.py') as handle:
-    handle.write(create_models_from_sql(sql))
-```
-
-By default, Pydantic-SQL-bridge will generate models for all your tables. Support for views and arbitrary select queries
-is planned.
-
-The name of the generated model will be the name of your table, with 'Row' added to the end of it. This is how
-Pydantic-SQL-bridge knows which table to query when loading data.
-
-#### Example
+### Example
 
 We set up a SQL table for portfolios and associated benchmark data.
 
@@ -111,6 +74,39 @@ with cursor('localhost', ':memory:') as c:
     benchmark = get_where(c, BenchmarkRow)
     eu_retail_portfolio = get_where(c, PortfolioRow, cluster='Europe Retail')
 ```
+
+### Generating Pydantic models
+
+If you have a repository of SQL statements that define your database schema, use `create_models_from_sql` to
+get the source code of a Python file with Pydantic models. You can check it into your repo to get all
+the benefits of working with Pydantic.
+
+```python
+from pydantic_sql_bridge.sql_first import create_models_from_sql
+
+with open('table_definitions.sql', 'r') as handle:
+    sql = handle.read().split('\n\n')
+
+with open('models.py') as handle:
+    handle.write(create_models_from_sql(sql))
+```
+
+By default, Pydantic-SQL-bridge will generate models for all your tables and views. Support for arbitrary select queries
+is planned.
+
+You can also  derive the models from the database directly, like so:
+
+```python
+from pydantic_sql_bridge.read_write import cursor
+from pydantic_sql_bridge.sql_first import create_models_from_db
+
+with cursor('local', 'sqlite') as c, open('models.py', 'w+') as handle:
+    handle.write('# GENERATED FILE')
+    handle.write(create_models_from_db(c))
+```
+
+Pydantic-SQL-bridge adds a special class variable to the generated models called `query_name`. This is how it knows
+which table or view to query.
 
 ### Pydantic first
 
