@@ -20,6 +20,7 @@ SQLGLOT_TYPE_TO_PYDANTIC = {
     SqlglotType.SMALLINT: "int",
     SqlglotType.VARCHAR: "str",
     SqlglotType.TEXT: "str",
+    SqlglotType.UNIQUEIDENTIFIER: "str",
 }
 
 COLUMN_DEFINITION_TRANSFORMERS = {
