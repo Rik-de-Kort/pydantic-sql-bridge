@@ -1,8 +1,8 @@
 import textwrap
 
-from sqlglot import parse_one, Dialects
+from sqlglot import Dialects
 
-from pydantic_sql_bridge.sql_first import create_models_from_sql, parse_create_table
+from pydantic_sql_bridge.sql_first import create_models_from_sql
 
 
 def test_generate_models_tsql():
@@ -127,4 +127,3 @@ def test_generate_models_straightforward():
     )
     actual = create_models_from_sql([portfolio_sql, benchmark_sql, master_sql])
     assert actual.replace("\n", "").strip() == expected.replace("\n", "").strip()
-
