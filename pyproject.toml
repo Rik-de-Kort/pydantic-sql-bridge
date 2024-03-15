@@ -17,17 +17,17 @@ pggm-datalab-utils = "^2.10"
 pytest = "^7.2.2"
 black = "^23"
 
-#[[tool.poetry.source]]
-#name = "ptho"
-#url = "https://files.pythonhosted.org"
-#priority = "primary"
-
-
 [[tool.poetry.source]]
-name = "Proget"
-url = "https://proget.pggm-intra.intern/pypi/PGGMPythonGallery/simple"
+name = "ptho"
+url = "https://files.pythonhosted.org"
 priority = "primary"
 
+
+#[[tool.poetry.source]]
+#name = "Proget"
+#url = "https://proget.pggm-intra.intern/pypi/PGGMPythonGallery/simple"
+#priority = "primary"
+#
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
