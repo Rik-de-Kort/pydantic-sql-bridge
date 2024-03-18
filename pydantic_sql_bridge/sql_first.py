@@ -276,6 +276,41 @@ def create_models_from_sql(
     return "\n\n\n".join(to_join) + "\n"
 
 
+def cursor_to_sql_mssql(c):
+    pk_data = raw_query(
+        c,
+        'select t.name as table_name, c.name as column_name from sys.key_constraints kc '
+        'inner join sys.index_columns ic on kc.parent_object_id = ic.object_id '
+        'inner join sys.columns c on ic.object_id = c.object_id and ic.index_column_id = c.column_id '
+        'inner join sys.tables t on t.object_id = ic.object_id '
+        'where kc.type=\'PK\''
+    )
+    primary_keys = defaultdict(list)
+    for record in pk_data:
+        primary_keys[record['table_name']].append(record['column_name'])
+    table_data = raw_query(
+        c,
+        'select * from information_schema.columns where table_schema != \'sys\''
+    )
+    tables = defaultdict(list)
+    for record in table_data:
+        tables[record['TABLE_NAME']].append(
+            (record['COLUMN_NAME'], record['DATA_TYPE'], record['NUMERIC_PRECISION'], record['NUMERIC_SCALE']))
+    to_join = []
+    for table_name, columns in tables.items():
+        to_join.append(f'CREATE TABLE {table_name}(')
+        for name, typ, precision, scale in columns:
+            typ = f'{typ}({scale}, {precision})' if typ.lower() == 'decimal' else typ
+            to_join.append(f'    [{name}] {typ.upper()},')
+        if table_name in primary_keys:
+            pk = ', '.join(primary_keys[table_name])
+            to_join.append(f'    CONSTRAINT PK_{table_name} PRIMARY KEY CLUSTERED ({pk}),')
+        to_join[-1] = to_join[-1][:-1]  # strip trailing comma
+        to_join.append(')\n')  # closing parenthesis and blank line
+    sql = '\n'.join(to_join).split('\n\n')
+    return sql
+
+
 def create_models_from_db(c: Cursor) -> str:
     """
     How to implement? Couple possible approaches:
@@ -287,39 +322,7 @@ def create_models_from_db(c: Cursor) -> str:
     """
     db_type = get_database_type(c)
     if db_type == DatabaseType.MSSQL:
-        pk_data = raw_query(
-            c,
-            'select t.name as table_name, c.name as column_name from sys.key_constraints kc '
-            'inner join sys.index_columns ic on kc.parent_object_id = ic.object_id '
-            'inner join sys.columns c on ic.object_id = c.object_id and ic.index_column_id = c.column_id '
-            'inner join sys.tables t on t.object_id = ic.object_id '
-            'where kc.type=\'PK\''
-        )
-        primary_keys = defaultdict(list)
-        for record in pk_data:
-            primary_keys[record['table_name']].append(record['column_name'])
-
-        table_data = raw_query(
-            c,
-            'select * from information_schema.columns where table_schema != \'sys\''
-        )
-        tables = defaultdict(list)
-        for record in table_data:
-            tables[record['TABLE_NAME']].append(
-                (record['COLUMN_NAME'], record['DATA_TYPE'], record['NUMERIC_PRECISION'], record['NUMERIC_SCALE']))
-
-        to_join = []
-        for table_name, columns in tables.items():
-            to_join.append(f'CREATE TABLE {table_name}(')
-            for name, typ, precision, scale in columns:
-                typ = f'{typ}({scale}, {precision})' if typ.lower() == 'decimal' else typ
-                to_join.append(f'    [{name}] {typ.upper()},')
-            if table_name in primary_keys:
-                pk = ', '.join(primary_keys[table_name])
-                to_join.append(f'    CONSTRAINT PK_{table_name} PRIMARY KEY CLUSTERED ({pk}),')
-            to_join[-1] = to_join[-1][:-1]  # strip trailing comma
-            to_join.append(')\n')  # closing parenthesis and blank line
-        sql = '\n'.join(to_join).split('\n\n')
+        sql = cursor_to_sql_mssql(c)
         return create_models_from_sql(sql, sqlglot.dialects.Dialects.TSQL)
     elif db_type == DatabaseType.SQLITE:
         raise NotImplementedError
